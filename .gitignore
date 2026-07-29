@@ -1,0 +1,8 @@
+node_modules
+admin/node_modules
+dist
+admin/.next
+.env
+.env.local
+admin/.env.local
+.DS_Store
