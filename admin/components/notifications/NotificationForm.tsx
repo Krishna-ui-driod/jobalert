@@ -54,7 +54,7 @@ export default function NotificationForm({ onSuccess }: NotificationFormProps) {
       // Upload PDF if provided
       if (pdfFile) {
         const path = `notifications/${Date.now()}-${pdfFile.name}`
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('pdfs')
           .upload(path, pdfFile, { upsert: true })
         if (uploadError) throw uploadError

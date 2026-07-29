@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic'
 import { createClient } from '@/lib/supabase/server'
-import { Settings, Shield, Database, Globe } from 'lucide-react'
+import { Shield, Database, Globe } from 'lucide-react'
 
 export const metadata = { title: 'Settings — JobAlert Admin' }
 
