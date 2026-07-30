@@ -264,19 +264,14 @@ function SearchAutocomplete({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 5 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 overflow-hidden text-left"
+            className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-200 z-[100] overflow-hidden text-left"
           >
-            <div className="px-3 py-2 border-b border-gray-100 bg-[#FAFBFD] flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#1A3C6E]">
-              <span>Exam Suggestions</span>
-              <span>{suggestions.length} matching</span>
-            </div>
-
             {suggestions.length === 0 ? (
               <div className="p-4 text-center text-xs text-[#5B6880]">
                 No matching exams found for &ldquo;{debouncedValue.trim()}&rdquo;
               </div>
             ) : (
-              <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+              <div className="divide-y divide-gray-100 max-h-80 overflow-y-auto">
                 {suggestions.map((item) => (
                   <div
                     key={item.id}
@@ -665,20 +660,21 @@ function Hero({
   };
 
   return (
-    <section className="bg-gradient-to-br from-[#1A3C6E] via-[#1E4780] to-[#0F2448] pt-12 pb-16 px-4 relative overflow-hidden">
-      {/* Decorative grid pattern */}
-      <div
-        className="absolute inset-0 opacity-[0.04]"
-        style={{
-          backgroundImage: "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)",
-          backgroundSize: "40px 40px",
-        }}
-      />
-      {/* Accent blobs */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-[#FF7A00]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
-      <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/4" />
+    <section className="bg-gradient-to-br from-[#1A3C6E] via-[#1E4780] to-[#0F2448] pt-12 pb-16 px-4 relative z-10">
+      {/* Decorative grid pattern & accent blobs */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div
+          className="absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage: "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)",
+            backgroundSize: "40px 40px",
+          }}
+        />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-[#FF7A00]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/4" />
+      </div>
 
-      <div className="max-w-4xl mx-auto relative text-center">
+      <div className="max-w-4xl mx-auto relative text-center z-10">
         <div className="inline-flex items-center gap-2 bg-[#FF7A00]/15 border border-[#FF7A00]/30 text-[#FFB066] text-xs font-semibold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6">
           <Bell size={12} />
           Real-Time Govt Job &amp; Exam Alerts
@@ -707,7 +703,7 @@ function Hero({
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
                 onSubmit={handleSearchSubmit}
-                className="w-full max-w-2xl bg-white rounded-xl shadow-2xl p-2 flex flex-col sm:flex-row gap-2 relative z-20 pointer-events-auto"
+                className="w-full max-w-2xl bg-white rounded-xl shadow-2xl p-2 flex flex-col sm:flex-row gap-2 relative z-30 pointer-events-auto"
               >
                 <div className="flex items-center flex-1 px-3 gap-2">
                   <Search size={16} className="text-[#1A3C6E]/40 flex-shrink-0" />
