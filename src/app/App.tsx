@@ -411,6 +411,7 @@ function Header({
   dbStates: DbState[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -458,7 +459,21 @@ function Header({
             </div>
           </Link>
 
-          {/* Docked Autocomplete Search Bar */}
+          {/* Mobile Search Toggle Icon (below 640px) */}
+          <AnimatePresence>
+            {shouldShowHeaderSearch && (
+              <button
+                type="button"
+                onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+                className="sm:hidden flex items-center gap-1 bg-white/15 hover:bg-white/25 text-white p-2 rounded-xl transition-colors flex-shrink-0"
+                aria-label="Search"
+              >
+                <Search size={18} />
+              </button>
+            )}
+          </AnimatePresence>
+
+          {/* Inline Header Search Bar (Tablet: sm to lg, Desktop: lg+) */}
           <AnimatePresence>
             {shouldShowHeaderSearch && (
               <motion.form
@@ -467,7 +482,7 @@ function Header({
                 exit={{ opacity: 0, y: -15, scale: 0.96 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
                 onSubmit={handleSearchSubmit}
-                className="flex items-center bg-white rounded-xl p-1 flex-1 max-w-sm md:max-w-md lg:max-w-lg mx-1 md:mx-2 shadow-md relative z-50 pointer-events-auto"
+                className="hidden sm:flex items-center bg-white rounded-xl p-1 flex-1 max-w-xs md:max-w-md lg:max-w-lg mx-2 shadow-md relative z-50 pointer-events-auto"
               >
                 <div className="flex items-center flex-1 px-2 gap-1.5 min-w-0">
                   <Search size={15} className="text-[#1A3C6E]/50 flex-shrink-0" />
@@ -480,13 +495,14 @@ function Header({
                     inputClassName="outline-none text-[#0F1C30] placeholder-gray-400 text-xs sm:text-sm w-full bg-transparent min-w-0"
                   />
                 </div>
-                {/* Dynamic State Selector (Fix 2) */}
-                <div className="hidden sm:flex items-center gap-1 px-2 border-l border-gray-200">
-                  <MapPin size={12} className="text-[#1A3C6E]/50" />
+
+                {/* State selector visible on desktop (lg+) */}
+                <div className="hidden lg:flex items-center gap-1 px-2 border-l border-gray-200">
+                  <MapPin size={12} className="text-[#1A3C6E]/50 flex-shrink-0" />
                   <select
                     value={selectedState}
                     onChange={(e) => setSelectedState(e.target.value)}
-                    className="outline-none text-xs text-[#0F1C30] bg-transparent cursor-pointer pr-1"
+                    className="outline-none text-xs text-[#0F1C30] bg-transparent cursor-pointer pr-1 max-w-[110px] truncate"
                   >
                     <option value="All">All States</option>
                     {dbStates.map((s) => (
@@ -603,6 +619,67 @@ function Header({
           </div>
         </div>
       </div>
+
+      {/* Mobile Expandable Search Drawer (below 640px) */}
+      <AnimatePresence>
+        {shouldShowHeaderSearch && mobileSearchOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="sm:hidden bg-[#122C52] border-t border-white/10 px-4 py-3 shadow-xl relative z-40"
+          >
+            <form
+              onSubmit={(e) => {
+                handleSearchSubmit(e);
+                setMobileSearchOpen(false);
+              }}
+              className="flex flex-col gap-2.5"
+            >
+              <div className="flex items-center bg-white rounded-xl px-3 py-1.5 shadow-sm relative z-50">
+                <Search size={16} className="text-[#1A3C6E]/50 mr-2 flex-shrink-0" />
+                <SearchAutocomplete
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  onSelectExam={(slug) => {
+                    navigate(`/exam/${slug}`);
+                    setMobileSearchOpen(false);
+                  }}
+                  allExams={allExams}
+                  placeholder="Search exams, departments..."
+                  inputClassName="outline-none text-[#0F1C30] placeholder-gray-400 text-sm w-full bg-transparent"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center bg-white rounded-xl px-3 py-2 shadow-sm">
+                  <MapPin size={14} className="text-[#1A3C6E]/50 mr-2 flex-shrink-0" />
+                  <select
+                    value={selectedState}
+                    onChange={(e) => setSelectedState(e.target.value)}
+                    className="outline-none text-xs text-[#0F1C30] bg-transparent cursor-pointer w-full"
+                  >
+                    <option value="All">All States</option>
+                    {dbStates.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  onClick={() => setMobileSearchOpen(false)}
+                  className="bg-[#FF7A00] hover:bg-[#E86E00] text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-colors shadow-md flex-shrink-0"
+                >
+                  Search Jobs
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Mobile Menu */}
       {menuOpen && (
