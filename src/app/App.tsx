@@ -391,7 +391,76 @@ function Ticker({ items }: { items: string[] }) {
   );
 }
 
-// ── Header Component (Fixed State Dropdown & Autocomplete Search) ─────────────
+// ── Web Push Subscription Helpers ──────────────────────────────────────────────
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+async function handleSubscribePush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    toast.error("Push notifications are not supported by your browser.");
+    return;
+  }
+
+  const publicVapidKey =
+    import.meta.env.VITE_VAPID_PUBLIC_KEY ||
+    "BPczYNuZboJYeyYhVuzYcSwhBp4BzVmrHMxBQMBlawTDkhhM6oN_oEPIvBf_KymR-u9SA0fr43uHZC5Ea2tAPnE";
+
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission === "denied") {
+      toast.error("Notification permission was denied in your browser settings.");
+      return;
+    }
+    if (permission !== "granted") {
+      return;
+    }
+
+    const register = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    await navigator.serviceWorker.ready;
+
+    const subscription = await register.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicVapidKey),
+    });
+
+    const subJson = subscription.toJSON();
+    const endpoint = subJson.endpoint;
+    const keys = subJson.keys;
+
+    if (!endpoint || !keys) {
+      throw new Error("Failed to generate push subscription parameters.");
+    }
+
+    const { error } = await supabase.from("push_subscriptions").upsert(
+      {
+        endpoint,
+        keys,
+        created_at: new Date().toISOString(),
+      },
+      { onConflict: "endpoint" }
+    );
+
+    if (error) {
+      console.warn("DB subscription insert warning:", error.message);
+    }
+
+    toast.success("Job Alerts Enabled! You will receive push notifications when new exams are posted.");
+  } catch (err: any) {
+    console.error("Push subscription failed:", err);
+    toast.error(err.message || "Failed to subscribe to job alerts.");
+  }
+}
+
+// ── Header Component ─────────────────────────────────────────────────────────
 
 function Header({
   searchQuery,
@@ -609,7 +678,10 @@ function Header({
 
           {/* Action Button & Mobile Toggle */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button className="flex items-center gap-1.5 bg-[#FF7A00] hover:bg-[#E86E00] text-white text-xs sm:text-sm font-semibold px-2.5 sm:px-3 py-2 rounded-lg transition-colors shadow-md whitespace-nowrap">
+            <button
+              onClick={handleSubscribePush}
+              className="flex items-center gap-1.5 bg-[#FF7A00] hover:bg-[#E86E00] text-white text-xs sm:text-sm font-semibold px-2.5 sm:px-3 py-2 rounded-lg transition-colors shadow-md whitespace-nowrap"
+            >
               <Bell size={14} />
               <span className="hidden sm:inline">Notify Me</span>
             </button>
