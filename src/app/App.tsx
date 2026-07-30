@@ -141,6 +141,33 @@ function fmtTicker(n: NotificationRow): string {
   };
   return `${icons[n.type] ?? "🔔"} ${n.title}`;
 }
+function matchExamQuery(e: ExamRow, query: string): boolean {
+  const term = query.toLowerCase().trim();
+  if (!term) return false;
+
+  // 1. Match exam title
+  if (e.title.toLowerCase().includes(term)) return true;
+
+  // 2. Match department name
+  if ((e.department ?? "").toLowerCase().includes(term)) return true;
+
+  // 3. Match category name & category slug (e.g. "Defence", "defence", "Banking", "banking", "Railway", "railway", "SSC", "ssc", "State PSC")
+  if ((e.categories?.name ?? "").toLowerCase().includes(term)) return true;
+  if ((e.categories?.slug ?? "").toLowerCase().includes(term)) return true;
+
+  // 4. Match job role tags (e.g. "officer", "clerk", "constable", "teacher", "engineer")
+  if (
+    e.exam_job_tags?.some(
+      (ejt) =>
+        (ejt.job_tags?.name ?? "").toLowerCase().includes(term) ||
+        (ejt.job_tags?.slug ?? "").toLowerCase().includes(term)
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
 
 function filterExams(
   exams: ExamRow[],
@@ -151,11 +178,7 @@ function filterExams(
 ) {
   return exams.filter((e) => {
     const q = searchQuery.toLowerCase().trim();
-    const searchMatch =
-      !q ||
-      e.title.toLowerCase().includes(q) ||
-      (e.department ?? "").toLowerCase().includes(q) ||
-      (e.categories?.name ?? "").toLowerCase().includes(q);
+    const searchMatch = !q || matchExamQuery(e, q);
 
     const stateMatch =
       selectedState === "All" ||
@@ -214,13 +237,7 @@ function SearchAutocomplete({
   }, [value]);
 
   const suggestions = debouncedValue.trim()
-    ? allExams
-        .filter(
-          (e) =>
-            e.title.toLowerCase().includes(debouncedValue.toLowerCase().trim()) ||
-            (e.department ?? "").toLowerCase().includes(debouncedValue.toLowerCase().trim())
-        )
-        .slice(0, 6)
+    ? allExams.filter((e) => matchExamQuery(e, debouncedValue)).slice(0, 10)
     : [];
 
   useEffect(() => {
