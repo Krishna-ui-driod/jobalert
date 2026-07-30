@@ -237,7 +237,7 @@ function Header({
   }, []);
 
   return (
-    <header className="bg-[#1A3C6E] sticky top-0 z-50 shadow-lg">
+    <header className="bg-[#1A3C6E] border-b border-white/10">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16 gap-3 md:gap-4">
           {/* Logo */}
@@ -1377,47 +1377,79 @@ function AppContent() {
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <div className="min-h-screen bg-[#F4F5F7]" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <Header
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        selectedState={selectedState}
-        setSelectedState={setSelectedState}
-        isScrolledPastHero={isScrolledPastHero}
-      />
-      <Ticker items={tickerItems} />
+  // Shared Layout Header Height Measurement (ResizeObserver)
+  const [headerHeight, setHeaderHeight] = useState(105);
+  const headerRef = useRef<HTMLDivElement>(null);
 
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <HomeView
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              selectedState={selectedState}
-              setSelectedState={setSelectedState}
-              isScrolledPastHero={isScrolledPastHero}
-              exams={exams}
-              loading={loading}
-              error={error}
-            />
-          }
+  useEffect(() => {
+    if (!headerRef.current) return;
+    const element = headerRef.current;
+
+    const updateHeight = () => {
+      if (element) {
+        setHeaderHeight(element.getBoundingClientRect().height);
+      }
+    };
+
+    updateHeight();
+
+    const observer = new ResizeObserver(() => {
+      updateHeight();
+    });
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-[#F4F5F7] flex flex-col" style={{ fontFamily: "'Inter', sans-serif" }}>
+      {/* Shared Fixed Top Header Container */}
+      <div ref={headerRef} className="fixed top-0 left-0 right-0 z-50 bg-[#1A3C6E] shadow-lg">
+        <Header
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          selectedState={selectedState}
+          setSelectedState={setSelectedState}
+          isScrolledPastHero={isScrolledPastHero}
         />
-        <Route
-          path="/category"
-          element={
-            <CategoryPage
-              categories={categories}
-              allJobTags={allJobTags}
-              catCounts={catCounts}
-              exams={exams}
-              loading={loading}
-            />
-          }
-        />
-        <Route path="/exam/:slug" element={<ExamDetailPage />} />
-      </Routes>
+        <Ticker items={tickerItems} />
+      </div>
+
+      {/* Main Content Wrapper with Dynamic Padding-Top Matching Header Height */}
+      <main style={{ paddingTop: `${headerHeight}px` }} className="flex-1">
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <HomeView
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                selectedState={selectedState}
+                setSelectedState={setSelectedState}
+                isScrolledPastHero={isScrolledPastHero}
+                exams={exams}
+                loading={loading}
+                error={error}
+              />
+            }
+          />
+          <Route
+            path="/category"
+            element={
+              <CategoryPage
+                categories={categories}
+                allJobTags={allJobTags}
+                catCounts={catCounts}
+                exams={exams}
+                loading={loading}
+              />
+            }
+          />
+          <Route path="/exam/:slug" element={<ExamDetailPage />} />
+        </Routes>
+      </main>
 
       <Footer />
     </div>
