@@ -488,7 +488,7 @@ function Hero({
       <div className="max-w-4xl mx-auto relative text-center">
         <div className="inline-flex items-center gap-2 bg-[#FF7A00]/15 border border-[#FF7A00]/30 text-[#FFB066] text-xs font-semibold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6">
           <Bell size={12} />
-          India&apos;s Most Trusted Govt Job Portal
+          Real-Time Govt Job &amp; Exam Alerts
         </div>
 
         <h1 className="text-white font-extrabold text-3xl sm:text-4xl md:text-5xl leading-tight mb-4" style={{ fontFamily: "'Poppins', sans-serif" }}>
