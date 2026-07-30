@@ -1,10 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+  useLocation,
+} from "react-router";
+import { motion, AnimatePresence } from "framer-motion";
 import logoUrl from "/logo.svg";
 import {
   Bell,
   Briefcase,
   Search,
   ChevronRight,
+  ChevronDown,
   FileText,
   ClipboardList,
   CheckSquare,
@@ -15,11 +27,15 @@ import {
   Twitter,
   Youtube,
   Instagram,
-  Send,
   AlertCircle,
   TrendingUp,
   Menu,
   X,
+  ArrowLeft,
+  GraduationCap,
+  Building2,
+  Clock,
+  Tag,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
@@ -38,6 +54,8 @@ interface ExamRow {
   slug: string;
   department: string | null;
   qualification: string | null;
+  age_limit: string | null;
+  description: string | null;
   application_start: string | null;
   application_end: string | null;
   exam_date: string | null;
@@ -63,27 +81,20 @@ interface NotificationRow {
 
 type JobStatus = "active" | "closing-soon" | "closed";
 
-interface CatCount {
-  label: string;
-  count: number;
-}
+// ── Category visual config ───────────────────────────────────────────────────
 
-// ── Static nav ────────────────────────────────────────────────────────────────
-const NAV_LINKS = ["Home", "Latest Jobs", "Results", "Admit Card", "Syllabus", "Answer Key"];
-
-// ── Category visual config (icons/colors — NOT counts, those come from DB) ────
 const CAT_VISUAL = [
-  { key: "new-jobs",    label: "New Jobs",    icon: Briefcase,    color: "#1A3C6E", bg: "#EEF2F8" },
-  { key: "result",      label: "Results",     icon: CheckSquare,  color: "#1F9D55", bg: "#E8F7EF" },
-  { key: "admit_card",  label: "Admit Card",  icon: FileText,     color: "#FF7A00", bg: "#FFF3E8" },
-  { key: "answer_key",  label: "Answer Key",  icon: ClipboardList,color: "#7C3AED", bg: "#F3EEFF" },
+  { key: "new-jobs", label: "New Jobs", icon: Briefcase, color: "#1A3C6E", bg: "#EEF2F8" },
+  { key: "result", label: "Results", icon: CheckSquare, color: "#1F9D55", bg: "#E8F7EF" },
+  { key: "admit_card", label: "Admit Card", icon: FileText, color: "#FF7A00", bg: "#FFF3E8" },
+  { key: "answer_key", label: "Answer Key", icon: ClipboardList, color: "#7C3AED", bg: "#F3EEFF" },
 ];
 
 const SEC_CAT_VISUAL = [
-  { label: "Syllabus",        key: "syllabus",         icon: BookOpen,    color: "#0EA5E9" },
-  { label: "Cut Off",         key: "cut_off",          icon: AlertCircle, color: "#F59E0B" },
-  { label: "Previous Papers", key: "previous_papers",  icon: FileText,    color: "#8B5CF6" },
-  { label: "Exam Calendar",   key: "exam_calendar",    icon: Calendar,    color: "#10B981" },
+  { label: "Syllabus", key: "syllabus", icon: BookOpen, color: "#0EA5E9" },
+  { label: "Cut Off", key: "cut_off", icon: AlertCircle, color: "#F59E0B" },
+  { label: "Previous Papers", key: "previous_papers", icon: FileText, color: "#8B5CF6" },
+  { label: "Exam Calendar", key: "exam_calendar", icon: Calendar, color: "#10B981" },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -117,12 +128,6 @@ function fmtTicker(n: NotificationRow): string {
   return `${icons[n.type] ?? "🔔"} ${n.title}`;
 }
 
-function fmtStat(n: number): string {
-  if (n >= 100000) return `${(n / 100000).toFixed(1)}L+`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K+`;
-  return `${n}+`;
-}
-
 // ── StatusTag ─────────────────────────────────────────────────────────────────
 
 function StatusTag({ status }: { status: JobStatus }) {
@@ -148,44 +153,15 @@ function StatusTag({ status }: { status: JobStatus }) {
   );
 }
 
-// ── Skeleton helpers ──────────────────────────────────────────────────────────
-
-function SkeletonRow() {
-  return (
-    <tr className="animate-pulse">
-      <td className="px-5 py-4">
-        <div className="h-4 bg-gray-200 rounded w-48 mb-1" />
-        <div className="h-3 bg-gray-100 rounded w-32" />
-      </td>
-      <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-16" /></td>
-      <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-20" /></td>
-      <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-20" /></td>
-      <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-24" /></td>
-      <td className="px-4 py-4"><div className="h-5 bg-gray-200 rounded-full w-16" /></td>
-      <td className="px-4 py-4"><div className="h-7 bg-gray-200 rounded-lg w-20" /></td>
-    </tr>
-  );
-}
-
-function SkeletonCard() {
-  return (
-    <div className="animate-pulse bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
-      <div className="w-12 h-12 rounded-xl bg-gray-200 mb-4" />
-      <div className="h-4 bg-gray-200 rounded w-24 mb-1" />
-      <div className="h-3 bg-gray-100 rounded w-16" />
-    </div>
-  );
-}
-
 // ── Ticker ────────────────────────────────────────────────────────────────────
 
 function Ticker({ items }: { items: string[] }) {
   const displayItems = items.length > 0 ? items : ["Loading live updates…"];
   return (
-    <div className="bg-[#1A3C6E] text-white py-2.5 overflow-hidden relative">
+    <div className="bg-[#1A3C6E] text-white py-2 overflow-hidden relative border-b border-white/10">
       <div className="flex items-center">
         <div className="flex-shrink-0 flex items-center gap-2 bg-[#FF7A00] px-4 py-1 z-10 relative">
-          <TrendingUp size={14} />
+          <TrendingUp size={13} />
           <span className="text-xs font-bold uppercase tracking-wider whitespace-nowrap">Live Updates</span>
         </div>
         <div className="overflow-hidden flex-1 ml-2">
@@ -197,7 +173,7 @@ function Ticker({ items }: { items: string[] }) {
             }}
           >
             {[...displayItems, ...displayItems].map((item, i) => (
-              <span key={i} className="text-sm text-white/90 inline-flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
+              <span key={i} className="text-xs sm:text-sm text-white/90 inline-flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
                 {item}
                 <span className="text-white/30">|</span>
               </span>
@@ -215,51 +191,183 @@ function Ticker({ items }: { items: string[] }) {
   );
 }
 
-// ── Header ────────────────────────────────────────────────────────────────────
+// ── Header Component (Fixed Issue 2 & Issue 3) ────────────────────────────────
 
-function Header() {
+function Header({
+  searchQuery,
+  setSearchQuery,
+  selectedState,
+  setSelectedState,
+  isScrolledPastHero,
+}: {
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  selectedState: string;
+  setSelectedState: (s: string) => void;
+  isScrolledPastHero: boolean;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isHome = location.pathname === "/";
+  const shouldShowHeaderSearch = isScrolledPastHero || !isHome;
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/category?search=${encodeURIComponent(searchQuery.trim())}`);
+    } else {
+      navigate(`/category`);
+    }
+  };
+
+  // Close "More" dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setMoreDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
     <header className="bg-[#1A3C6E] sticky top-0 z-50 shadow-lg">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between h-16 gap-4">
+        <div className="flex items-center justify-between h-16 gap-3 md:gap-4">
           {/* Logo */}
-          <a href="#" className="flex items-center gap-2.5 flex-shrink-0 group">
+          <Link to="/" className="flex items-center gap-2 flex-shrink-0 group">
             <div className="bg-white rounded-xl px-2 py-1 group-hover:scale-105 transition-transform shadow-sm">
-              <img src={logoUrl} alt="JobAlert logo" className="h-10 w-auto" />
+              <img src={logoUrl} alt="JobAlert logo" className="h-8 md:h-9 w-auto" />
             </div>
             <div className="leading-tight">
-              <span className="text-white font-bold text-xl tracking-tight" style={{ fontFamily: "'Poppins', sans-serif" }}>
+              <span className="text-white font-bold text-lg md:text-xl tracking-tight" style={{ fontFamily: "'Poppins', sans-serif" }}>
                 Job<span className="text-[#FF7A00]">Alert</span>
               </span>
-              <p className="text-white/50 text-[9px] uppercase tracking-widest hidden sm:block">Govt Jobs &amp; Exams India</p>
+              <p className="text-white/50 text-[8px] md:text-[9px] uppercase tracking-widest hidden sm:block">Govt Jobs &amp; Exams India</p>
             </div>
-          </a>
+          </Link>
 
-          {/* Desktop Nav */}
+          {/* Docked Search Bar (Issue 2 Fixed: Fully interactive, works across mobile/tablet/desktop) */}
+          <AnimatePresence>
+            {shouldShowHeaderSearch && (
+              <motion.form
+                initial={{ opacity: 0, y: -15, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -15, scale: 0.96 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                onSubmit={handleSearchSubmit}
+                className="flex items-center bg-white rounded-xl p-1 flex-1 max-w-sm md:max-w-md lg:max-w-lg mx-1 md:mx-2 shadow-md relative z-50 pointer-events-auto"
+              >
+                <div className="flex items-center flex-1 px-2 gap-1.5 min-w-0">
+                  <Search size={15} className="text-[#1A3C6E]/50 flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search jobs..."
+                    className="outline-none text-[#0F1C30] placeholder-gray-400 text-xs sm:text-sm w-full bg-transparent min-w-0"
+                  />
+                </div>
+                <div className="hidden sm:flex items-center gap-1 px-2 border-l border-gray-200">
+                  <MapPin size={12} className="text-[#1A3C6E]/50" />
+                  <select
+                    value={selectedState}
+                    onChange={(e) => setSelectedState(e.target.value)}
+                    className="outline-none text-xs text-[#0F1C30] bg-transparent cursor-pointer pr-1"
+                  >
+                    <option value="All">All States</option>
+                    <option value="Uttar Pradesh">UP</option>
+                    <option value="Rajasthan">Rajasthan</option>
+                    <option value="Bihar">Bihar</option>
+                    <option value="Maharashtra">MH</option>
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  className="bg-[#FF7A00] hover:bg-[#E86E00] text-white font-semibold text-xs px-2.5 sm:px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex-shrink-0"
+                >
+                  Search
+                </button>
+              </motion.form>
+            )}
+          </AnimatePresence>
+
+          {/* Desktop Nav Links (Issue 3 Fixed: Reduced visible items to Home, Category, Latest Jobs, Results + "More" Dropdown) */}
           <nav className="hidden lg:flex items-center gap-1">
-            {NAV_LINKS.map((link) => (
-              <a key={link} href="#" className="text-white/80 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap">
-                {link}
-              </a>
-            ))}
+            <Link
+              to="/"
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
+                location.pathname === "/" ? "bg-white/15 text-white font-bold" : "text-white/80 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              Home
+            </Link>
+            <Link
+              to="/category"
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
+                location.pathname === "/category" ? "bg-[#FF7A00] text-white font-bold shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              Category
+            </Link>
+            <a href="/#latest-jobs" className="text-white/80 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap">
+              Latest Jobs
+            </a>
+            <Link to="/category?cat=result" className="text-white/80 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap">
+              Results
+            </Link>
+
+            {/* "More" Dropdown Menu */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => setMoreDropdownOpen(!moreDropdownOpen)}
+                onMouseEnter={() => setMoreDropdownOpen(true)}
+                className="flex items-center gap-1 text-white/80 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-md text-sm font-medium transition-all"
+              >
+                More <ChevronDown size={14} className={`transition-transform duration-200 ${moreDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {moreDropdownOpen && (
+                <div
+                  onMouseLeave={() => setMoreDropdownOpen(false)}
+                  className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+                >
+                  <Link
+                    to="/category?cat=admit_card"
+                    onClick={() => setMoreDropdownOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-[#0F1C30] hover:bg-[#EEF2F8] hover:text-[#FF7A00] font-medium transition-colors"
+                  >
+                    <FileText size={15} className="text-[#FF7A00]" /> Admit Card
+                  </Link>
+                  <Link
+                    to="/category?cat=syllabus"
+                    onClick={() => setMoreDropdownOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-[#0F1C30] hover:bg-[#EEF2F8] hover:text-[#FF7A00] font-medium transition-colors"
+                  >
+                    <BookOpen size={15} className="text-[#0EA5E9]" /> Syllabus
+                  </Link>
+                  <Link
+                    to="/category?cat=answer_key"
+                    onClick={() => setMoreDropdownOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-[#0F1C30] hover:bg-[#EEF2F8] hover:text-[#FF7A00] font-medium transition-colors"
+                  >
+                    <ClipboardList size={15} className="text-[#7C3AED]" /> Answer Key
+                  </Link>
+                </div>
+              )}
+            </div>
           </nav>
 
-          {/* Search + Bell */}
+          {/* Action Button & Mobile Toggle */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className={`hidden md:flex items-center bg-white/10 border border-white/20 rounded-lg overflow-hidden transition-all ${searchOpen ? "w-52" : "w-40"} focus-within:border-[#FF7A00]/60 focus-within:bg-white/15`}>
-              <Search size={14} className="ml-3 text-white/50 flex-shrink-0" />
-              <input
-                type="text"
-                placeholder="Search exams..."
-                onFocus={() => setSearchOpen(true)}
-                onBlur={() => setSearchOpen(false)}
-                className="bg-transparent text-white placeholder-white/40 text-sm px-2 py-2 outline-none w-full"
-              />
-            </div>
-            <button className="flex items-center gap-1.5 bg-[#FF7A00] hover:bg-[#E86E00] text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors shadow-md whitespace-nowrap">
+            <button className="flex items-center gap-1.5 bg-[#FF7A00] hover:bg-[#E86E00] text-white text-xs sm:text-sm font-semibold px-2.5 sm:px-3 py-2 rounded-lg transition-colors shadow-md whitespace-nowrap">
               <Bell size={14} />
               <span className="hidden sm:inline">Notify Me</span>
             </button>
@@ -270,43 +378,73 @@ function Header() {
         </div>
       </div>
 
-      {/* Mobile Nav */}
+      {/* Mobile Menu */}
       {menuOpen && (
         <div className="lg:hidden bg-[#122C52] border-t border-white/10 px-4 pb-4">
-          <div className="flex items-center bg-white/10 border border-white/20 rounded-lg mt-3 mb-2">
-            <Search size={14} className="ml-3 text-white/50" />
-            <input type="text" placeholder="Search exams, results..." className="bg-transparent text-white placeholder-white/40 text-sm px-2 py-2.5 outline-none w-full" />
-          </div>
-          {NAV_LINKS.map((link) => (
-            <a key={link} href="#" className="flex items-center text-white/80 hover:text-white py-2.5 border-b border-white/10 text-sm font-medium gap-2">
-              <ChevronRight size={14} className="text-[#FF7A00]" /> {link}
+          <form onSubmit={handleSearchSubmit} className="flex items-center bg-white/10 border border-white/20 rounded-lg mt-3 mb-2 px-3">
+            <Search size={14} className="text-white/50" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search exams, jobs, state..."
+              className="bg-transparent text-white placeholder-white/40 text-sm px-2 py-2.5 outline-none w-full"
+            />
+          </form>
+          <div className="flex flex-col space-y-1">
+            <Link to="/" onClick={() => setMenuOpen(false)} className="flex items-center text-white/80 hover:text-white py-2 border-b border-white/10 text-sm font-medium gap-2">
+              <ChevronRight size={14} className="text-[#FF7A00]" /> Home
+            </Link>
+            <Link to="/category" onClick={() => setMenuOpen(false)} className="flex items-center text-[#FF7A00] font-bold py-2 border-b border-white/10 text-sm gap-2">
+              <ChevronRight size={14} className="text-[#FF7A00]" /> Category
+            </Link>
+            <a href="/#latest-jobs" onClick={() => setMenuOpen(false)} className="flex items-center text-white/80 hover:text-white py-2 border-b border-white/10 text-sm font-medium gap-2">
+              <ChevronRight size={14} className="text-[#FF7A00]" /> Latest Jobs
             </a>
-          ))}
+            <Link to="/category?cat=result" onClick={() => setMenuOpen(false)} className="flex items-center text-white/80 hover:text-white py-2 border-b border-white/10 text-sm font-medium gap-2">
+              <ChevronRight size={14} className="text-[#FF7A00]" /> Results
+            </Link>
+            <Link to="/category?cat=admit_card" onClick={() => setMenuOpen(false)} className="flex items-center text-white/80 hover:text-white py-2 border-b border-white/10 text-sm font-medium gap-2">
+              <ChevronRight size={14} className="text-[#FF7A00]" /> Admit Card
+            </Link>
+            <Link to="/category?cat=syllabus" onClick={() => setMenuOpen(false)} className="flex items-center text-white/80 hover:text-white py-2 border-b border-white/10 text-sm font-medium gap-2">
+              <ChevronRight size={14} className="text-[#FF7A00]" /> Syllabus
+            </Link>
+            <Link to="/category?cat=answer_key" onClick={() => setMenuOpen(false)} className="flex items-center text-white/80 hover:text-white py-2 border-b border-white/10 text-sm font-medium gap-2">
+              <ChevronRight size={14} className="text-[#FF7A00]" /> Answer Key
+            </Link>
+          </div>
         </div>
       )}
     </header>
   );
 }
 
-// ── Hero ──────────────────────────────────────────────────────────────────────
+// ── Hero Section (Home Page) ──────────────────────────────────────────────────
 
-interface HeroProps {
-  stats: { activeJobs: number; vacanciesListed: number; dailyVisitors: number; examsTracked: number };
-  categories: DbCategory[];
-  onFilter: (cat: string) => void;
-  activeFilter: string;
-}
+function Hero({
+  searchQuery,
+  setSearchQuery,
+  selectedState,
+  setSelectedState,
+  isScrolledPastHero,
+}: {
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  selectedState: string;
+  setSelectedState: (s: string) => void;
+  isScrolledPastHero: boolean;
+}) {
+  const navigate = useNavigate();
 
-function Hero({ stats, categories, onFilter, activeFilter }: HeroProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const chips = ["All", ...categories.map((c) => c.name)];
-
-  const statDisplay = [
-    { label: "Active Jobs",      value: stats.activeJobs > 0      ? fmtStat(stats.activeJobs)      : "—" },
-    { label: "Vacancies Listed", value: stats.vacanciesListed > 0 ? fmtStat(stats.vacanciesListed) : "—" },
-    { label: "Daily Visitors",   value: stats.dailyVisitors > 0   ? fmtStat(stats.dailyVisitors)   : "—" },
-    { label: "Exams Tracked",    value: stats.examsTracked > 0    ? fmtStat(stats.examsTracked)    : "—" },
-  ];
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/category?search=${encodeURIComponent(searchQuery.trim())}`);
+    } else {
+      navigate(`/category`);
+    }
+  };
 
   return (
     <section className="bg-gradient-to-br from-[#1A3C6E] via-[#1E4780] to-[#0F2448] pt-12 pb-16 px-4 relative overflow-hidden">
@@ -341,221 +479,91 @@ function Hero({ stats, categories, onFilter, activeFilter }: HeroProps) {
           Real-time alerts for SSC, Railway, Banking, State PSC &amp; Defence exams. Results, Admit Cards, Syllabus — all in one place.
         </p>
 
-        {/* Main Search */}
-        <div className="bg-white rounded-xl shadow-2xl p-2 flex flex-col sm:flex-row gap-2 mb-6 max-w-2xl mx-auto">
-          <div className="flex items-center flex-1 px-3 gap-2">
-            <Search size={16} className="text-[#1A3C6E]/40 flex-shrink-0" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by exam name, state, qualification..."
-              className="outline-none text-[#0F1C30] placeholder-gray-400 text-sm w-full bg-transparent"
-            />
-          </div>
-          <div className="flex items-center gap-2 px-3 border-t sm:border-t-0 sm:border-l border-gray-100 pt-2 sm:pt-0">
-            <MapPin size={14} className="text-[#1A3C6E]/40" />
-            <select className="outline-none text-sm text-[#0F1C30] bg-transparent pr-2">
-              <option>All States</option>
-              <option>Uttar Pradesh</option>
-              <option>Rajasthan</option>
-              <option>Bihar</option>
-              <option>Maharashtra</option>
-            </select>
-          </div>
-          <button className="bg-[#FF7A00] hover:bg-[#E86E00] text-white font-semibold text-sm px-5 py-2.5 rounded-lg transition-colors whitespace-nowrap shadow-md">
-            Search Jobs
-          </button>
-        </div>
-
-        {/* Filter Chips — from DB categories */}
-        <div className="flex flex-wrap justify-center gap-2">
-          {chips.map((chip) => (
-            <button
-              key={chip}
-              onClick={() => onFilter(chip)}
-              className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition-all ${
-                activeFilter === chip
-                  ? "bg-[#FF7A00] border-[#FF7A00] text-white shadow-md"
-                  : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20 hover:text-white"
-              }`}
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
-
-        {/* Stats row — live from DB */}
-        <div className="flex flex-wrap justify-center gap-6 mt-10 pt-8 border-t border-white/10">
-          {statDisplay.map(({ label, value }) => (
-            <div key={label} className="text-center">
-              <div className="text-[#FF7A00] font-extrabold text-xl" style={{ fontFamily: "'Poppins', sans-serif" }}>
-                {value}
-              </div>
-              <div className="text-white/50 text-xs mt-0.5">{label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── Category Cards ────────────────────────────────────────────────────────────
-
-interface CategoryCardsProps {
-  counts: Record<string, number>;
-  loading: boolean;
-}
-
-function CategoryCards({ counts, loading }: CategoryCardsProps) {
-  return (
-    <section className="max-w-7xl mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-[#0F1C30] font-bold text-xl" style={{ fontFamily: "'Poppins', sans-serif" }}>
-            Browse by Category
-          </h2>
-          <p className="text-[#5B6880] text-sm mt-0.5">Find the latest government notifications</p>
-        </div>
-        <a href="#" className="text-[#1A3C6E] text-sm font-semibold hover:text-[#FF7A00] transition-colors flex items-center gap-1">
-          View All <ChevronRight size={14} />
-        </a>
-      </div>
-
-      {loading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {CAT_VISUAL.map(({ key, label, icon: Icon, color, bg }) => (
-            <a
-              key={key}
-              href="#"
-              className="group bg-white rounded-xl p-5 border border-[#1A3C6E]/8 shadow-sm hover:shadow-lg hover:border-[#FF7A00]/30 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer"
-            >
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110" style={{ backgroundColor: bg }}>
-                <Icon size={22} style={{ color }} />
-              </div>
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-[#0F1C30] font-bold text-base" style={{ fontFamily: "'Poppins', sans-serif" }}>{label}</p>
-                  <p className="text-[#5B6880] text-xs mt-0.5">Updated today</p>
+        {/* Hero Search Bar */}
+        <div className="min-h-[56px] flex items-center justify-center">
+          <AnimatePresence>
+            {!isScrolledPastHero && (
+              <motion.form
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                onSubmit={handleSearchSubmit}
+                className="w-full max-w-2xl bg-white rounded-xl shadow-2xl p-2 flex flex-col sm:flex-row gap-2 relative z-20 pointer-events-auto"
+              >
+                <div className="flex items-center flex-1 px-3 gap-2">
+                  <Search size={16} className="text-[#1A3C6E]/40 flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by exam name, state, qualification..."
+                    className="outline-none text-[#0F1C30] placeholder-gray-400 text-sm w-full bg-transparent"
+                  />
                 </div>
-                <span className="text-white text-xs font-bold px-2 py-0.5 rounded-full mt-0.5" style={{ backgroundColor: color }}>
-                  {counts[key] ?? 0}
-                </span>
-              </div>
-              <div className="mt-3 flex items-center gap-1 text-xs font-semibold group-hover:text-[#FF7A00] text-[#1A3C6E] transition-colors">
-                View All <ChevronRight size={12} />
-              </div>
-            </a>
-          ))}
+                <div className="flex items-center gap-2 px-3 border-t sm:border-t-0 sm:border-l border-gray-100 pt-2 sm:pt-0">
+                  <MapPin size={14} className="text-[#1A3C6E]/40" />
+                  <select
+                    value={selectedState}
+                    onChange={(e) => setSelectedState(e.target.value)}
+                    className="outline-none text-sm text-[#0F1C30] bg-transparent pr-2 cursor-pointer"
+                  >
+                    <option value="All">All States</option>
+                    <option value="Uttar Pradesh">Uttar Pradesh</option>
+                    <option value="Rajasthan">Rajasthan</option>
+                    <option value="Bihar">Bihar</option>
+                    <option value="Maharashtra">Maharashtra</option>
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  className="bg-[#FF7A00] hover:bg-[#E86E00] text-white font-semibold text-sm px-5 py-2.5 rounded-lg transition-colors whitespace-nowrap shadow-md"
+                >
+                  Search Jobs
+                </button>
+              </motion.form>
+            )}
+          </AnimatePresence>
         </div>
-      )}
-
-      {/* Secondary category row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-        {SEC_CAT_VISUAL.map(({ label, key, icon: Icon, color }) => (
-          <a
-            key={key}
-            href="#"
-            className="group bg-white rounded-lg px-4 py-3 border border-[#1A3C6E]/8 shadow-sm hover:border-[#FF7A00]/30 hover:shadow-md transition-all flex items-center gap-3"
-          >
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: color + "18" }}>
-              <Icon size={17} style={{ color }} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[#0F1C30] font-semibold text-sm truncate">{label}</p>
-              <p className="text-[#5B6880] text-xs">{loading ? "—" : (counts[key] ?? 0)} items</p>
-            </div>
-          </a>
-        ))}
       </div>
     </section>
   );
 }
 
-// ── Job Listings ──────────────────────────────────────────────────────────────
+// ── Redesigned Compact Grid Job Listings (Issue 1 Fixed: 2 Columns on Desktop/Tablet, 1 Column on Mobile) ──
 
-interface JobListingsProps {
+function HomeJobListings({
+  exams,
+  loading,
+  error,
+}: {
   exams: ExamRow[];
   loading: boolean;
   error: string | null;
-  activeTab: string;
-  setActiveTab: (t: string) => void;
-  categories: DbCategory[];
-  allJobTags: JobTag[];
-  activeJobFilter: string;
-  setActiveJobFilter: (t: string) => void;
-}
+}) {
+  const [visibleCount, setVisibleCount] = useState(8);
+  const navigate = useNavigate();
 
-function JobListings({ exams, loading, error, activeTab, setActiveTab, categories, allJobTags, activeJobFilter, setActiveJobFilter }: JobListingsProps) {
-  const [visibleCount, setVisibleCount] = useState(6);
-  const chips = ["All", ...categories.map((c) => c.name)];
-  const jobChips = ["All", ...allJobTags.map((t) => t.slug)];
-
-  const filtered = exams.filter((e) => {
-    const catMatch = activeTab === "All" || e.categories?.name === activeTab;
-    const tagMatch = activeJobFilter === "All" ||
-      e.exam_job_tags.some((ejt) => ejt.job_tags?.slug === activeJobFilter);
-    return catMatch && tagMatch;
-  });
-  const visible = filtered.slice(0, visibleCount);
+  const visible = exams.slice(0, visibleCount);
 
   return (
-    <section className="max-w-7xl mx-auto px-4 pb-12">
+    <section id="latest-jobs" className="max-w-6xl mx-auto px-4 py-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-[#0F1C30] font-bold text-xl" style={{ fontFamily: "'Poppins', sans-serif" }}>
+          <h2 className="text-[#0F1C30] font-bold text-2xl" style={{ fontFamily: "'Poppins', sans-serif" }}>
             Latest Job Notifications
           </h2>
-          <p className="text-[#5B6880] text-sm mt-0.5">
-            Showing <span className="text-[#1A3C6E] font-semibold">{filtered.length}</span> active listings
+          <p className="text-[#5B6880] text-sm mt-1">
+            Real-time government recruitment announcements
           </p>
         </div>
-        <div className="flex gap-1.5 flex-wrap">
-          {chips.map((chip) => (
-            <button
-              key={chip}
-              onClick={() => { setActiveTab(chip); setVisibleCount(6); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                activeTab === chip
-                  ? "bg-[#1A3C6E] border-[#1A3C6E] text-white"
-                  : "bg-white border-[#1A3C6E]/15 text-[#5B6880] hover:border-[#1A3C6E]/40 hover:text-[#1A3C6E]"
-              }`}
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
+        <Link
+          to="/category"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#FF7A00] hover:text-[#E86E00] transition-colors"
+        >
+          Browse All Categories <ChevronRight size={16} />
+        </Link>
       </div>
-
-      {/* Job type filter chips */}
-      {allJobTags.length > 0 && (
-        <div className="flex gap-1.5 flex-wrap mb-4">
-          <span className="text-[#5B6880] text-xs font-semibold self-center mr-1">Job Type:</span>
-          {jobChips.map((slug) => {
-            const tag = allJobTags.find(t => t.slug === slug);
-            const isAll = slug === "All";
-            const active = activeJobFilter === slug;
-            return (
-              <button
-                key={slug}
-                onClick={() => { setActiveJobFilter(slug); setVisibleCount(6); }}
-                className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all"
-                style={active
-                  ? { backgroundColor: tag?.color ?? '#1A3C6E', borderColor: tag?.color ?? '#1A3C6E', color: 'white' }
-                  : { backgroundColor: 'white', borderColor: (tag?.color ?? '#1A3C6E') + '30', color: tag?.color ?? '#5B6880' }
-                }
-              >
-                {isAll ? "All Types" : (tag?.name ?? slug)}
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       {/* Error state */}
       {error && (
@@ -565,146 +573,328 @@ function JobListings({ exams, loading, error, activeTab, setActiveTab, categorie
         </div>
       )}
 
-      {/* Desktop Table */}
-      <div className="hidden md:block bg-white rounded-xl border border-[#1A3C6E]/10 shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-[#EEF2F8] border-b border-[#1A3C6E]/10">
-              <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-5 py-3.5">Exam / Organization</th>
-              <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-4 py-3.5">Posts</th>
-              <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-4 py-3.5">Posted</th>
-              <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-4 py-3.5">Last Date</th>
-              <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-4 py-3.5">Qualification</th>
-              <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-4 py-3.5">Status</th>
-              <th className="px-4 py-3.5" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#1A3C6E]/6">
-            {loading
-              ? [1, 2, 3, 4, 5, 6].map((i) => <SkeletonRow key={i} />)
-              : visible.length === 0
-              ? (
-                <tr>
-                  <td colSpan={7} className="px-5 py-16 text-center text-[#5B6880] text-sm">
-                    No listings found for this category. Add exams via the admin panel.
-                  </td>
-                </tr>
-              )
-              : visible.map((exam, i) => {
-                const jobStatus = calcJobStatus(exam);
-                return (
-                  <tr key={exam.id} className={`group hover:bg-[#FFF7F0] transition-colors ${i % 2 === 0 ? "" : "bg-[#FAFBFD]"}`}>
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-[#0F1C30] text-sm group-hover:text-[#1A3C6E] transition-colors">
-                        {exam.title}
-                      </p>
-                      <p className="text-[#5B6880] text-xs mt-0.5">{exam.department ?? "—"}</p>
-                      {/* Job type tag pills */}
-                      {exam.exam_job_tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {exam.is_all_india && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
-                              🇮🇳 All India
-                            </span>
-                          )}
-                          {exam.exam_job_tags.map((ejt) =>
-                            ejt.job_tags ? (
-                              <span
-                                key={ejt.job_tags.id}
-                                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
-                                style={{ backgroundColor: ejt.job_tags.color + '18', color: ejt.job_tags.color }}
-                              >
-                                ● {ejt.job_tags.name}
-                              </span>
-                            ) : null
-                          )}
-                        </div>
+      {/* 2-Column Responsive Grid Layout (Fills box naturally without empty space gaps) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {loading ? (
+          [1, 2, 3, 4].map((i) => (
+            <div key={i} className="animate-pulse bg-white rounded-2xl border border-gray-100 p-5 h-44" />
+          ))
+        ) : visible.length === 0 ? (
+          <div className="col-span-full bg-white rounded-2xl border border-gray-100 p-12 text-center text-[#5B6880] text-sm">
+            No active job listings found.
+          </div>
+        ) : (
+          visible.map((exam) => {
+            const jobStatus = calcJobStatus(exam);
+            return (
+              <div
+                key={exam.id}
+                onClick={() => navigate(`/exam/${exam.slug}`)}
+                className="group bg-white rounded-2xl border border-[#1A3C6E]/12 p-5 shadow-sm hover:shadow-md hover:border-[#FF7A00]/40 transition-all cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="text-xs font-bold text-[#1A3C6E] bg-blue-50 px-2.5 py-0.5 rounded-md truncate max-w-[60%]">
+                      {exam.categories?.name ?? "General"}
+                    </span>
+                    <StatusTag status={jobStatus} />
+                  </div>
+
+                  <h3 className="font-bold text-[#0F1C30] text-base group-hover:text-[#FF7A00] transition-colors leading-snug mb-1">
+                    {exam.title}
+                  </h3>
+
+                  {exam.department && (
+                    <p className="text-[#5B6880] text-xs font-medium mb-3 truncate">
+                      {exam.department}
+                    </p>
+                  )}
+
+                  {/* Job type & All India tags */}
+                  {(exam.is_all_india || (exam.exam_job_tags && exam.exam_job_tags.length > 0)) && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {exam.is_all_india && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
+                          🇮🇳 All India
+                        </span>
                       )}
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className="text-[#0F1C30] font-bold text-sm">
-                        {exam.vacancy_count ? exam.vacancy_count.toLocaleString("en-IN") : "—"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-[#5B6880] text-sm">{fmtDate(exam.created_at)}</td>
-                    <td className="px-4 py-4">
-                      <span className={`text-sm font-semibold ${jobStatus === "closing-soon" ? "text-[#E03E3E]" : "text-[#5B6880]"}`}>
-                        {fmtDate(exam.application_end)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-[#5B6880] text-sm">{exam.qualification ?? "—"}</td>
-                    <td className="px-4 py-4"><StatusTag status={jobStatus} /></td>
-                    <td className="px-4 py-4">
-                      {exam.official_link && jobStatus !== "closed" ? (
-                        <a
-                          href={exam.official_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all bg-[#FF7A00] hover:bg-[#E86E00] text-white shadow-sm hover:shadow-md"
-                        >
-                          Apply Now <ExternalLink size={10} />
-                        </a>
-                      ) : (
-                        <button
-                          disabled
-                          className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#EAECF0] text-[#9CA3AF] cursor-not-allowed"
-                        >
-                          Closed
-                        </button>
+                      {exam.exam_job_tags?.map((ejt) =>
+                        ejt.job_tags ? (
+                          <span
+                            key={ejt.job_tags.id}
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
+                            style={{ backgroundColor: ejt.job_tags.color + "18", color: ejt.job_tags.color }}
+                          >
+                            ● {ejt.job_tags.name}
+                          </span>
+                        ) : null
                       )}
-                    </td>
-                  </tr>
-                );
-              })
-            }
-          </tbody>
-        </table>
-        {!loading && filtered.length > visibleCount && (
-          <div className="px-5 py-4 border-t border-[#1A3C6E]/8 bg-[#FAFBFD] flex justify-center">
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs mt-2">
+                  <span className="text-[#5B6880]">
+                    Last Date:{" "}
+                    <span className={`font-bold ${jobStatus === "closing-soon" ? "text-[#E03E3E]" : "text-[#0F1C30]"}`}>
+                      {fmtDate(exam.application_end)}
+                    </span>
+                  </span>
+                  <span className="text-[#FF7A00] font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                    View Details <ChevronRight size={14} />
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {!loading && exams.length > visibleCount && (
+        <div className="mt-6 flex justify-center">
+          <button
+            onClick={() => setVisibleCount((c) => c + 6)}
+            className="text-[#1A3C6E] hover:text-[#FF7A00] text-sm font-bold bg-white border border-[#1A3C6E]/20 hover:border-[#FF7A00]/40 px-6 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+          >
+            Load More Listings <ChevronRight size={15} className="rotate-90" />
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── Category Page ─────────────────────────────────────────────────────────────
+
+function CategoryPage({
+  categories,
+  allJobTags,
+  catCounts,
+  exams,
+  loading,
+}: {
+  categories: DbCategory[];
+  allJobTags: JobTag[];
+  catCounts: Record<string, number>;
+  exams: ExamRow[];
+  loading: boolean;
+}) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  const selectedCategory = searchParams.get("cat") || "All";
+  const selectedTag = searchParams.get("tag") || "All";
+  const searchQuery = searchParams.get("search") || "";
+
+  const categoryChips = ["All", ...categories.map((c) => c.name)];
+
+  const filteredExams = exams.filter((e) => {
+    const catMatch =
+      selectedCategory === "All" ||
+      selectedCategory === "new-jobs" ||
+      e.categories?.name === selectedCategory ||
+      e.categories?.slug === selectedCategory;
+
+    const tagMatch =
+      selectedTag === "All" ||
+      e.exam_job_tags?.some((ejt) => ejt.job_tags?.slug === selectedTag);
+
+    const searchMatch =
+      !searchQuery ||
+      e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (e.department ?? "").toLowerCase().includes(searchQuery.toLowerCase());
+
+    return catMatch && tagMatch && searchMatch;
+  });
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      {/* Category Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-extrabold text-[#0F1C30]" style={{ fontFamily: "'Poppins', sans-serif" }}>
+          Browse Government Jobs by Category
+        </h1>
+        <p className="text-[#5B6880] text-sm mt-1">
+          Select a category or job type to quickly find active recruitment notifications.
+        </p>
+      </div>
+
+      {/* Visual Category Cards Section */}
+      <div className="mb-10">
+        <h2 className="text-[#0F1C30] font-bold text-lg mb-4" style={{ fontFamily: "'Poppins', sans-serif" }}>
+          Quick Navigation
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          {CAT_VISUAL.map(({ key, label, icon: Icon, color, bg }) => (
             <button
-              onClick={() => setVisibleCount((c) => c + 4)}
-              className="text-[#1A3C6E] hover:text-[#FF7A00] text-sm font-semibold transition-colors flex items-center gap-1.5"
+              key={key}
+              onClick={() => {
+                setSearchParams({ cat: key });
+              }}
+              className="group bg-white rounded-xl p-5 border border-[#1A3C6E]/10 shadow-sm hover:shadow-lg hover:border-[#FF7A00]/40 text-left transition-all duration-200 cursor-pointer"
             >
-              Load More <ChevronRight size={14} className="rotate-90" />
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-110" style={{ backgroundColor: bg }}>
+                <Icon size={22} style={{ color }} />
+              </div>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[#0F1C30] font-bold text-base">{label}</p>
+                  <p className="text-[#5B6880] text-xs mt-0.5">Updated today</p>
+                </div>
+                <span className="text-white text-xs font-bold px-2.5 py-0.5 rounded-full" style={{ backgroundColor: color }}>
+                  {catCounts[key] ?? 0}
+                </span>
+              </div>
             </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {SEC_CAT_VISUAL.map(({ label, key, icon: Icon, color }) => (
+            <button
+              key={key}
+              onClick={() => setSearchParams({ cat: key })}
+              className="group bg-white rounded-lg px-4 py-3 border border-[#1A3C6E]/10 shadow-sm hover:border-[#FF7A00]/40 hover:shadow-md text-left transition-all flex items-center gap-3"
+            >
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: color + "18" }}>
+                <Icon size={17} style={{ color }} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[#0F1C30] font-semibold text-sm truncate">{label}</p>
+                <p className="text-[#5B6880] text-xs">{loading ? "—" : (catCounts[key] ?? 0)} items</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Filter Chips Container */}
+      <div className="bg-white rounded-2xl p-6 border border-[#1A3C6E]/10 shadow-sm mb-8">
+        {/* Category Filter Chips */}
+        <div className="mb-5">
+          <label className="block text-xs font-bold uppercase tracking-wider text-[#1A3C6E] mb-2">
+            Filter by Department / Category:
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {categoryChips.map((chip) => {
+              const active = selectedCategory === chip || (chip === "All" && selectedCategory === "All");
+              return (
+                <button
+                  key={chip}
+                  onClick={() => setSearchParams({ cat: chip, tag: selectedTag })}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    active
+                      ? "bg-[#1A3C6E] border-[#1A3C6E] text-white shadow-sm"
+                      : "bg-white border-gray-200 text-[#5B6880] hover:border-[#1A3C6E]/40 hover:text-[#1A3C6E]"
+                  }`}
+                >
+                  {chip}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Job Type Filter Chips */}
+        {allJobTags.length > 0 && (
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#1A3C6E] mb-2">
+              Filter by Job Role / Type:
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSearchParams({ cat: selectedCategory, tag: "All" })}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                  selectedTag === "All"
+                    ? "bg-[#FF7A00] border-[#FF7A00] text-white shadow-sm"
+                    : "bg-white border-gray-200 text-[#5B6880] hover:border-[#FF7A00]"
+                }`}
+              >
+                All Job Types
+              </button>
+              {allJobTags.map((tag) => {
+                const active = selectedTag === tag.slug;
+                return (
+                  <button
+                    key={tag.id}
+                    onClick={() => setSearchParams({ cat: selectedCategory, tag: tag.slug })}
+                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all"
+                    style={
+                      active
+                        ? { backgroundColor: tag.color, borderColor: tag.color, color: "white" }
+                        : { backgroundColor: "white", borderColor: tag.color + "40", color: tag.color }
+                    }
+                  >
+                    ● {tag.name}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Mobile Cards */}
-      <div className="md:hidden space-y-3">
-        {loading
-          ? [1, 2, 3].map((i) => (
-            <div key={i} className="animate-pulse bg-white rounded-xl border border-[#1A3C6E]/10 shadow-sm p-4 h-40" />
-          ))
-          : visible.length === 0
-          ? (
-            <div className="bg-white rounded-xl border border-[#1A3C6E]/10 shadow-sm p-8 text-center text-[#5B6880] text-sm">
-              No listings for this category yet.
-            </div>
-          )
-          : visible.map((exam) => {
-            const jobStatus = calcJobStatus(exam);
-            return (
-              <div key={exam.id} className="bg-white rounded-xl border border-[#1A3C6E]/10 shadow-sm p-4">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="min-w-0">
-                    <p className="font-bold text-[#0F1C30] text-sm">{exam.title}</p>
-                    <p className="text-[#5B6880] text-xs mt-0.5">{exam.department ?? "—"}</p>
-                    {/* Tag pills */}
-                    {(exam.is_all_india || exam.exam_job_tags.length > 0) && (
-                      <div className="flex flex-wrap gap-1 mt-1.5">
+      {/* Filtered Exams Cards Grid */}
+      <div className="bg-white rounded-2xl border border-[#1A3C6E]/12 shadow-sm overflow-hidden p-6">
+        <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-6">
+          <h3 className="font-bold text-[#0F1C30] text-lg">
+            Job Listings <span className="text-[#FF7A00]">({filteredExams.length})</span>
+          </h3>
+          {(selectedCategory !== "All" || selectedTag !== "All" || searchQuery) && (
+            <button
+              onClick={() => setSearchParams({})}
+              className="text-xs text-[#E03E3E] font-semibold hover:underline flex items-center gap-1"
+            >
+              <X size={12} /> Clear Filters
+            </button>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="p-8 text-center text-sm text-[#5B6880]">Loading exams...</div>
+        ) : filteredExams.length === 0 ? (
+          <div className="p-12 text-center text-[#5B6880]">
+            <AlertCircle size={32} className="mx-auto mb-2 text-gray-300" />
+            <p className="font-semibold text-[#0F1C30]">No exams found matching selected filters.</p>
+            <p className="text-xs text-[#5B6880] mt-1">Try resetting your category or job type selection.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredExams.map((exam) => {
+              const jobStatus = calcJobStatus(exam);
+              return (
+                <div
+                  key={exam.id}
+                  onClick={() => navigate(`/exam/${exam.slug}`)}
+                  className="group bg-white rounded-xl border border-[#1A3C6E]/10 p-5 hover:border-[#FF7A00]/40 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="text-xs font-bold text-[#1A3C6E] bg-blue-50 px-2.5 py-0.5 rounded-md truncate max-w-[60%]">
+                        {exam.categories?.name ?? "General"}
+                      </span>
+                      <StatusTag status={jobStatus} />
+                    </div>
+
+                    <h4 className="font-bold text-[#0F1C30] text-base group-hover:text-[#FF7A00] transition-colors leading-snug mb-1">
+                      {exam.title}
+                    </h4>
+                    <p className="text-[#5B6880] text-xs font-medium mb-3 truncate">{exam.department ?? "Government Department"}</p>
+
+                    {/* Job type tags */}
+                    {(exam.is_all_india || (exam.exam_job_tags && exam.exam_job_tags.length > 0)) && (
+                      <div className="flex flex-wrap gap-1.5 mb-3">
                         {exam.is_all_india && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
                             🇮🇳 All India
                           </span>
                         )}
-                        {exam.exam_job_tags.map((ejt) =>
+                        {exam.exam_job_tags?.map((ejt) =>
                           ejt.job_tags ? (
                             <span
                               key={ejt.job_tags.id}
                               className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
-                              style={{ backgroundColor: ejt.job_tags.color + '18', color: ejt.job_tags.color }}
+                              style={{ backgroundColor: ejt.job_tags.color + "18", color: ejt.job_tags.color }}
                             >
                               ● {ejt.job_tags.name}
                             </span>
@@ -713,90 +903,248 @@ function JobListings({ exams, loading, error, activeTab, setActiveTab, categorie
                       </div>
                     )}
                   </div>
-                  <StatusTag status={jobStatus} />
-                </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-3 text-xs">
-                  <div>
-                    <span className="text-[#5B6880]">Posts: </span>
-                    <span className="font-bold text-[#0F1C30]">{exam.vacancy_count ? exam.vacancy_count.toLocaleString("en-IN") : "—"}</span>
-                  </div>
-                  <div>
-                    <span className="text-[#5B6880]">Category: </span>
-                    <span className="font-semibold text-[#1A3C6E]">{exam.categories?.name ?? "—"}</span>
-                  </div>
-                  <div>
-                    <span className="text-[#5B6880]">Last Date: </span>
-                    <span className={`font-semibold ${jobStatus === "closing-soon" ? "text-[#E03E3E]" : "text-[#0F1C30]"}`}>
-                      {fmtDate(exam.application_end)}
+
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs">
+                    <span className="text-[#5B6880]">
+                      Last Date:{" "}
+                      <span className={`font-bold ${jobStatus === "closing-soon" ? "text-[#E03E3E]" : "text-[#0F1C30]"}`}>
+                        {fmtDate(exam.application_end)}
+                      </span>
                     </span>
-                  </div>
-                  <div>
-                    <span className="text-[#5B6880]">Qual: </span>
-                    <span className="font-semibold text-[#0F1C30]">{exam.qualification ?? "—"}</span>
+                    <button className="bg-[#1A3C6E] group-hover:bg-[#FF7A00] text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                      View Details
+                    </button>
                   </div>
                 </div>
-                {exam.official_link && jobStatus !== "closed" ? (
-                  <a
-                    href={exam.official_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full flex items-center justify-center gap-2 text-sm font-bold py-2.5 rounded-lg transition-all bg-[#FF7A00] hover:bg-[#E86E00] text-white shadow-sm"
-                  >
-                    <ExternalLink size={14} /> Apply Now
-                  </a>
-                ) : (
-                  <button disabled className="w-full flex items-center justify-center gap-2 text-sm font-bold py-2.5 rounded-lg bg-[#EAECF0] text-[#9CA3AF] cursor-not-allowed">
-                    Application Closed
-                  </button>
-                )}
-              </div>
-            );
-          })
-        }
-        {!loading && filtered.length > visibleCount && (
-          <button
-            onClick={() => setVisibleCount((c) => c + 4)}
-            className="w-full py-3 text-[#1A3C6E] font-semibold text-sm border border-[#1A3C6E]/20 rounded-xl bg-white hover:border-[#FF7A00]/40 hover:text-[#FF7A00] transition-all"
-          >
-            Load More Jobs
-          </button>
+              );
+            })}
+          </div>
         )}
       </div>
-    </section>
+    </div>
   );
 }
 
-// ── Footer ────────────────────────────────────────────────────────────────────
+// ── Exam Detail Page (Issue 4 Fixed: 100% Dynamic Data from Supabase) ──────────
 
-function Footer() {
-  const [email, setEmail] = useState("");
+function ExamDetailPage() {
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const [exam, setExam] = useState<ExamRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchExam() {
+      if (!slug) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const { data, error: err } = await supabase
+          .from("exams")
+          .select("*, categories(id,name,slug), exam_job_tags(job_tags(id,name,slug,color))")
+          .eq("slug", slug)
+          .single();
+
+        if (err) throw err;
+        setExam(data as any);
+      } catch (e: any) {
+        console.error("Error fetching exam details:", e);
+        setError(e.message || "Failed to load exam details.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchExam();
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+        <div className="animate-spin w-8 h-8 border-4 border-[#FF7A00] border-t-transparent rounded-full mx-auto mb-4" />
+        <p className="text-[#5B6880] text-sm font-medium">Loading exam details...</p>
+      </div>
+    );
+  }
+
+  if (error || !exam) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+        <AlertCircle size={40} className="mx-auto text-red-500 mb-3" />
+        <h2 className="text-xl font-bold text-[#0F1C30]">Exam Not Found</h2>
+        <p className="text-[#5B6880] text-sm mt-1">{error || "The exam entry you are looking for does not exist in the database."}</p>
+        <button
+          onClick={() => navigate(-1)}
+          className="mt-6 inline-flex items-center gap-2 bg-[#1A3C6E] text-white font-semibold text-sm px-5 py-2.5 rounded-xl hover:bg-[#FF7A00] transition-colors"
+        >
+          <ArrowLeft size={16} /> Go Back
+        </button>
+      </div>
+    );
+  }
+
+  const jobStatus = calcJobStatus(exam);
 
   return (
-    <footer className="bg-[#0F1C30] text-white">
-      {/* Newsletter */}
-      <div className="bg-[#1A3C6E] py-10 px-4">
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center gap-6">
-          <div className="flex-1 text-center sm:text-left">
-            <h3 className="font-bold text-lg" style={{ fontFamily: "'Poppins', sans-serif" }}>
-              Get instant job alerts in your inbox
-            </h3>
-            <p className="text-white/60 text-sm mt-1">Subscribe to daily digest — no spam, only relevant jobs.</p>
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* Back Button */}
+      <button
+        onClick={() => navigate(-1)}
+        className="inline-flex items-center gap-2 text-sm font-semibold text-[#1A3C6E] hover:text-[#FF7A00] mb-6 transition-colors"
+      >
+        <ArrowLeft size={16} /> Back to Listings
+      </button>
+
+      {/* Main Header Card (Dynamic from DB) */}
+      <div className="bg-white rounded-2xl border border-[#1A3C6E]/12 shadow-md p-6 md:p-8 mb-6">
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          {exam.categories && (
+            <span className="bg-blue-100 text-[#1A3C6E] text-xs font-bold px-3 py-1 rounded-full">
+              {exam.categories.name}
+            </span>
+          )}
+          <StatusTag status={jobStatus} />
+          {exam.is_all_india && (
+            <span className="bg-blue-50 text-blue-600 border border-blue-100 text-xs font-bold px-3 py-1 rounded-full">
+              🇮🇳 All India Recruitment
+            </span>
+          )}
+        </div>
+
+        <h1 className="text-2xl md:text-3xl font-extrabold text-[#0F1C30] leading-tight mb-2" style={{ fontFamily: "'Poppins', sans-serif" }}>
+          {exam.title}
+        </h1>
+
+        {exam.department && (
+          <p className="text-[#5B6880] text-base font-medium flex items-center gap-2 mb-4">
+            <Building2 size={18} className="text-[#1A3C6E]" /> {exam.department}
+          </p>
+        )}
+
+        {/* Dynamic Job Type Tags */}
+        {exam.exam_job_tags && exam.exam_job_tags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-100">
+            <span className="text-xs font-bold uppercase text-[#5B6880] self-center mr-1">Job Type:</span>
+            {exam.exam_job_tags.map((ejt) =>
+              ejt.job_tags ? (
+                <span
+                  key={ejt.job_tags.id}
+                  className="px-3 py-1 rounded-full text-xs font-semibold"
+                  style={{ backgroundColor: ejt.job_tags.color + "18", color: ejt.job_tags.color }}
+                >
+                  ● {ejt.job_tags.name}
+                </span>
+              ) : null
+            )}
           </div>
-          <div className="flex w-full sm:w-auto gap-2">
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              className="flex-1 sm:w-56 bg-white/10 border border-white/20 rounded-lg px-4 py-2.5 text-sm text-white placeholder-white/40 outline-none focus:border-[#FF7A00]/60 transition-colors"
-            />
-            <button className="bg-[#FF7A00] hover:bg-[#E86E00] text-white font-bold px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap">
-              <Send size={14} /> Subscribe
-            </button>
+        )}
+      </div>
+
+      {/* Dynamic Key Details Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+          <div className="w-10 h-10 rounded-lg bg-orange-50 text-[#FF7A00] flex items-center justify-center mx-auto mb-2">
+            <Briefcase size={20} />
           </div>
+          <span className="text-xs text-[#5B6880] block font-medium">Total Posts</span>
+          <span className="text-lg font-bold text-[#0F1C30]">
+            {exam.vacancy_count ? exam.vacancy_count.toLocaleString("en-IN") : "—"}
+          </span>
+        </div>
+
+        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+          <div className="w-10 h-10 rounded-lg bg-blue-50 text-[#1A3C6E] flex items-center justify-center mx-auto mb-2">
+            <Clock size={20} />
+          </div>
+          <span className="text-xs text-[#5B6880] block font-medium">Last Date to Apply</span>
+          <span className={`text-sm font-bold ${jobStatus === "closing-soon" ? "text-[#E03E3E]" : "text-[#0F1C30]"}`}>
+            {fmtDate(exam.application_end)}
+          </span>
+        </div>
+
+        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+          <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center mx-auto mb-2">
+            <GraduationCap size={20} />
+          </div>
+          <span className="text-xs text-[#5B6880] block font-medium">Qualification</span>
+          <span className="text-sm font-bold text-[#0F1C30]">{exam.qualification || "—"}</span>
+        </div>
+
+        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+          <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2">
+            <Tag size={20} />
+          </div>
+          <span className="text-xs text-[#5B6880] block font-medium">Age Limit</span>
+          <span className="text-sm font-bold text-[#0F1C30]">{exam.age_limit || "—"}</span>
         </div>
       </div>
 
+      {/* Dynamic Dates & Official Website Section */}
+      <div className="bg-white rounded-2xl border border-[#1A3C6E]/10 shadow-sm p-6 md:p-8 mb-6">
+        <h3 className="text-lg font-bold text-[#0F1C30] mb-4 flex items-center gap-2">
+          <Calendar size={18} className="text-[#FF7A00]" /> Important Dates &amp; Links
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="p-3.5 bg-gray-50 rounded-xl">
+            <span className="text-xs text-[#5B6880] block font-medium">Application Start</span>
+            <span className="text-sm font-bold text-[#0F1C30]">{fmtDate(exam.application_start)}</span>
+          </div>
+          <div className="p-3.5 bg-gray-50 rounded-xl">
+            <span className="text-xs text-[#5B6880] block font-medium">Application End</span>
+            <span className="text-sm font-bold text-[#0F1C30]">{fmtDate(exam.application_end)}</span>
+          </div>
+          <div className="p-3.5 bg-gray-50 rounded-xl">
+            <span className="text-xs text-[#5B6880] block font-medium">Exam Date</span>
+            <span className="text-sm font-bold text-[#0F1C30]">{fmtDate(exam.exam_date)}</span>
+          </div>
+        </div>
+
+        {/* Apply Now Link */}
+        {exam.official_link ? (
+          <a
+            href={exam.official_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-2 bg-[#FF7A00] hover:bg-[#E86E00] text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md text-base"
+          >
+            Apply Now on Official Website <ExternalLink size={18} />
+          </a>
+        ) : (
+          <button disabled className="w-full py-3.5 bg-gray-100 text-gray-400 font-bold rounded-xl cursor-not-allowed text-center text-sm">
+            Official Application Link Not Provided
+          </button>
+        )}
+      </div>
+
+      {/* Dynamic Description / Multi-Paragraph Content Section */}
+      <div className="bg-white rounded-2xl border border-[#1A3C6E]/10 shadow-sm p-6 md:p-8">
+        <h3 className="text-lg font-bold text-[#0F1C30] mb-3">Notification Details &amp; Overview</h3>
+        {exam.description ? (
+          <div className="text-[#0F1C30] text-sm leading-relaxed whitespace-pre-line">{exam.description}</div>
+        ) : (
+          <div className="text-[#5B6880] text-sm leading-relaxed space-y-3">
+            <p>
+              Official recruitment notification released for <span className="font-semibold text-[#0F1C30]">{exam.title}</span>
+              {exam.department ? ` by ${exam.department}` : ""}. Candidates meeting the eligibility requirements can register and submit their applications online before the specified closing date.
+            </p>
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-[#1A3C6E] space-y-1">
+              <p><span className="font-bold">Qualification:</span> {exam.qualification || "Refer to official advertisement"}</p>
+              <p><span className="font-bold">Age Limit:</span> {exam.age_limit || "As per government guidelines"}</p>
+              <p><span className="font-bold">Total Vacancies:</span> {exam.vacancy_count ? exam.vacancy_count.toLocaleString("en-IN") : "Specified in official PDF"}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Footer Component ──────────────────────────────────────────────────────────
+
+function Footer() {
+  return (
+    <footer className="bg-[#0F1C30] text-white mt-12">
       {/* Main Footer */}
       <div className="max-w-7xl mx-auto px-4 py-12 grid grid-cols-2 sm:grid-cols-4 gap-8">
         <div className="col-span-2 sm:col-span-1">
@@ -825,18 +1173,18 @@ function Footer() {
 
         {[
           { title: "Quick Links", links: ["Latest Jobs", "Results", "Admit Card", "Syllabus", "Answer Key", "Cut Off"] },
-          { title: "Categories",  links: ["SSC Jobs", "Railway Jobs", "Banking Jobs", "Defence Jobs", "State PSC", "Teaching Jobs"] },
-          { title: "Resources",   links: ["About Us", "Contact", "Privacy Policy", "Terms of Use", "Sitemap", "Advertise With Us"] },
+          { title: "Categories", links: ["SSC Jobs", "Railway Jobs", "Banking Jobs", "Defence Jobs", "State PSC", "Teaching Jobs"] },
+          { title: "Resources", links: ["About Us", "Contact", "Privacy Policy", "Terms of Use", "Sitemap", "Advertise With Us"] },
         ].map(({ title, links }) => (
           <div key={title}>
             <h4 className="font-bold text-sm uppercase tracking-wider text-white/80 mb-4">{title}</h4>
             <ul className="space-y-2.5">
               {links.map((link) => (
                 <li key={link}>
-                  <a href="#" className="text-white/50 hover:text-[#FF7A00] text-sm transition-colors flex items-center gap-1.5 group">
+                  <Link to="/category" className="text-white/50 hover:text-[#FF7A00] text-sm transition-colors flex items-center gap-1.5 group">
                     <ChevronRight size={12} className="text-white/20 group-hover:text-[#FF7A00] flex-shrink-0" />
                     {link}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -863,43 +1211,91 @@ function Footer() {
   );
 }
 
-// ── App — root data fetcher ───────────────────────────────────────────────────
+// ── Main Home View Component ──────────────────────────────────────────────────
 
-export default function App() {
+function HomeView({
+  searchQuery,
+  setSearchQuery,
+  selectedState,
+  setSelectedState,
+  isScrolledPastHero,
+  exams,
+  loading,
+  error,
+}: {
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  selectedState: string;
+  setSelectedState: (s: string) => void;
+  isScrolledPastHero: boolean;
+  exams: ExamRow[];
+  loading: boolean;
+  error: string | null;
+}) {
+  return (
+    <>
+      <Hero
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        selectedState={selectedState}
+        setSelectedState={setSelectedState}
+        isScrolledPastHero={isScrolledPastHero}
+      />
+      <HomeJobListings exams={exams} loading={loading} error={error} />
+    </>
+  );
+}
+
+// ── App Container Component ───────────────────────────────────────────────────
+
+function AppContent() {
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [categories, setCategories] = useState<DbCategory[]>([]);
   const [allJobTags, setAllJobTags] = useState<JobTag[]>([]);
   const [tickerItems, setTickerItems] = useState<string[]>([]);
   const [catCounts, setCatCounts] = useState<Record<string, number>>({});
-  const [stats, setStats] = useState({ activeJobs: 0, vacanciesListed: 0, dailyVisitors: 0, examsTracked: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState("All");
-  const [activeJobFilter, setActiveJobFilter] = useState("All");
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedState, setSelectedState] = useState("All");
+
+  // Scroll listener for Header Search Bar animation
+  const [isScrolledPastHero, setIsScrolledPastHero] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 220) {
+        setIsScrolledPastHero(true);
+      } else {
+        setIsScrolledPastHero(false);
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   useEffect(() => {
     async function loadAll() {
       try {
         const today = new Date().toISOString().split("T")[0];
 
-        // Parallel fetches — exams query tries with job tags first, falls back without
         let examsData: any[] = [];
         let jobTagsData: any[] = [];
         let catsData: any[] = [];
 
-        // Try the full query with exam_job_tags join
+        // Fetch exams
         const examsFullRes = await supabase
           .from("exams")
-          .select("id,title,slug,department,qualification,application_start,application_end,exam_date,status,official_link,vacancy_count,is_all_india,created_at,categories(id,name,slug),exam_job_tags(job_tags(id,name,slug,color))")
+          .select("id,title,slug,department,qualification,age_limit,description,application_start,application_end,exam_date,status,official_link,vacancy_count,is_all_india,created_at,categories(id,name,slug),exam_job_tags(job_tags(id,name,slug,color))")
           .order("created_at", { ascending: false })
           .limit(100);
 
         if (examsFullRes.error) {
-          // Fallback: table might not exist yet — query without the join
           console.warn("[JobAlert] exam_job_tags join failed, falling back:", examsFullRes.error.message);
           const examsBasicRes = await supabase
             .from("exams")
-            .select("id,title,slug,department,qualification,application_start,application_end,exam_date,status,official_link,vacancy_count,is_all_india,created_at,categories(id,name,slug)")
+            .select("id,title,slug,department,qualification,age_limit,description,application_start,application_end,exam_date,status,official_link,vacancy_count,is_all_india,created_at,categories(id,name,slug)")
             .order("created_at", { ascending: false })
             .limit(100);
           if (examsBasicRes.error) throw examsBasicRes.error;
@@ -908,22 +1304,21 @@ export default function App() {
           examsData = examsFullRes.data ?? [];
         }
 
-        // Fetch categories (always needed)
+        // Fetch categories
         const catsRes = await supabase.from("categories").select("id,name,slug").order("name");
         if (catsRes.error) throw catsRes.error;
         catsData = catsRes.data ?? [];
 
-        // Fetch job tags (may not exist yet — non-fatal)
+        // Fetch job tags
         const jobTagsRes = await supabase.from("job_tags").select("id,name,slug,color").order("name");
         if (!jobTagsRes.error) {
           jobTagsData = jobTagsRes.data ?? [];
         }
 
-        // Remaining parallel count queries (these are all safe — they use existing tables)
+        // Fetch remaining count metrics & notifications
         const [
           notifsRes,
           activeCountRes,
-          examsTotalRes,
           resultCountRes,
           admitCountRes,
           answerCountRes,
@@ -932,7 +1327,6 @@ export default function App() {
         ] = await Promise.all([
           supabase.from("notifications").select("type,title").order("published_at", { ascending: false }).limit(20),
           supabase.from("exams").select("*", { count: "exact", head: true }).in("status", ["active", "upcoming"]),
-          supabase.from("exams").select("*", { count: "exact", head: true }),
           supabase.from("notifications").select("*", { count: "exact", head: true }).eq("type", "result"),
           supabase.from("notifications").select("*", { count: "exact", head: true }).eq("type", "admit_card"),
           supabase.from("notifications").select("*", { count: "exact", head: true }).eq("type", "answer_key"),
@@ -940,7 +1334,6 @@ export default function App() {
           supabase.from("exams").select("*", { count: "exact", head: true }).gte("exam_date", today),
         ]);
 
-        // Normalize exam_job_tags — guarantee the field is always an array
         const normalizedExams = examsData.map((e: any) => ({
           ...e,
           exam_job_tags: e.exam_job_tags ?? [],
@@ -952,30 +1345,14 @@ export default function App() {
         setAllJobTags(jobTagsData);
         setTickerItems((notifsRes.data ?? []).map(fmtTicker));
 
-        // Vacancy sum
-        const vacancySum = ((examsRes.data ?? []) as ExamRow[]).reduce(
-          (acc, e) => acc + (e.vacancy_count ?? 0), 0
-        );
-
-        // Page views — increment then read today's count
-        await supabase.from("page_views").insert({});
-        const pvRes = await supabase.from("page_views").select("*", { count: "exact", head: true }).gte("viewed_at", `${today}T00:00:00`);
-
-        setStats({
-          activeJobs: activeCountRes.count ?? 0,
-          vacanciesListed: vacancySum,
-          dailyVisitors: pvRes.count ?? 0,
-          examsTracked: examsTotalRes.count ?? 0,
-        });
-
         setCatCounts({
-          "new-jobs":     activeCountRes.count ?? 0,
-          result:         resultCountRes.count ?? 0,
-          admit_card:     admitCountRes.count ?? 0,
-          answer_key:     answerCountRes.count ?? 0,
-          syllabus:       syllabusCountRes.count ?? 0,
-          exam_calendar:  examCalRes.count ?? 0,
-          cut_off:        0,
+          "new-jobs": activeCountRes.count ?? 0,
+          result: resultCountRes.count ?? 0,
+          admit_card: admitCountRes.count ?? 0,
+          answer_key: answerCountRes.count ?? 0,
+          syllabus: syllabusCountRes.count ?? 0,
+          exam_calendar: examCalRes.count ?? 0,
+          cut_off: 0,
           previous_papers: 0,
         });
       } catch (err: any) {
@@ -988,7 +1365,6 @@ export default function App() {
 
     loadAll();
 
-    // Auto-refresh ticker every 5 minutes
     const interval = setInterval(async () => {
       const { data } = await supabase
         .from("notifications")
@@ -1003,27 +1379,55 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F4F5F7]" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <Header />
+      <Header
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        selectedState={selectedState}
+        setSelectedState={setSelectedState}
+        isScrolledPastHero={isScrolledPastHero}
+      />
       <Ticker items={tickerItems} />
-      <Hero
-        stats={stats}
-        categories={categories}
-        onFilter={setActiveFilter}
-        activeFilter={activeFilter}
-      />
-      <CategoryCards counts={catCounts} loading={loading} />
-      <JobListings
-        exams={exams}
-        loading={loading}
-        error={error}
-        activeTab={activeFilter}
-        setActiveTab={setActiveFilter}
-        categories={categories}
-        allJobTags={allJobTags}
-        activeJobFilter={activeJobFilter}
-        setActiveJobFilter={setActiveJobFilter}
-      />
+
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <HomeView
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              selectedState={selectedState}
+              setSelectedState={setSelectedState}
+              isScrolledPastHero={isScrolledPastHero}
+              exams={exams}
+              loading={loading}
+              error={error}
+            />
+          }
+        />
+        <Route
+          path="/category"
+          element={
+            <CategoryPage
+              categories={categories}
+              allJobTags={allJobTags}
+              catCounts={catCounts}
+              exams={exams}
+              loading={loading}
+            />
+          }
+        />
+        <Route path="/exam/:slug" element={<ExamDetailPage />} />
+      </Routes>
+
       <Footer />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   );
 }
