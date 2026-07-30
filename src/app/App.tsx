@@ -10,6 +10,7 @@ import {
   useLocation,
 } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast, Toaster } from "sonner";
 import logoUrl from "/logo.svg";
 import {
   Bell,
@@ -49,6 +50,12 @@ interface JobTag {
   color: string;
 }
 
+interface DbState {
+  id: string;
+  name: string;
+  code: string;
+}
+
 interface ExamRow {
   id: string;
   title: string;
@@ -67,6 +74,7 @@ interface ExamRow {
   created_at: string;
   categories: { id: string; name: string; slug: string } | null;
   exam_job_tags: { job_tags: JobTag | null }[];
+  exam_states?: { states: { id: string; name: string; code: string } | null }[];
 }
 
 interface DbCategory {
@@ -134,6 +142,180 @@ function fmtTicker(n: NotificationRow): string {
   return `${icons[n.type] ?? "🔔"} ${n.title}`;
 }
 
+function filterExams(
+  exams: ExamRow[],
+  searchQuery: string,
+  selectedState: string,
+  selectedCategory?: string,
+  selectedTag?: string
+) {
+  return exams.filter((e) => {
+    const q = searchQuery.toLowerCase().trim();
+    const searchMatch =
+      !q ||
+      e.title.toLowerCase().includes(q) ||
+      (e.department ?? "").toLowerCase().includes(q) ||
+      (e.categories?.name ?? "").toLowerCase().includes(q);
+
+    const stateMatch =
+      selectedState === "All" ||
+      e.is_all_india ||
+      e.exam_states?.some(
+        (es) =>
+          es.states?.name.toLowerCase() === selectedState.toLowerCase() ||
+          es.states?.code.toLowerCase() === selectedState.toLowerCase()
+      );
+
+    const catMatch =
+      !selectedCategory ||
+      selectedCategory === "All" ||
+      selectedCategory === "new-jobs" ||
+      e.categories?.name === selectedCategory ||
+      e.categories?.slug === selectedCategory;
+
+    const tagMatch =
+      !selectedTag ||
+      selectedTag === "All" ||
+      e.exam_job_tags?.some((ejt) => ejt.job_tags?.slug === selectedTag);
+
+    return searchMatch && stateMatch && catMatch && tagMatch;
+  });
+}
+
+// ── Search Autocomplete Component (Fix 1) ────────────────────────────────────
+
+function SearchAutocomplete({
+  value,
+  onChange,
+  onSelectExam,
+  allExams,
+  placeholder,
+  className,
+  inputClassName,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  onSelectExam: (slug: string) => void;
+  allExams: ExamRow[];
+  placeholder: string;
+  className?: string;
+  inputClassName?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Debounce input (300ms)
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [value]);
+
+  const suggestions = debouncedValue.trim()
+    ? allExams
+        .filter(
+          (e) =>
+            e.title.toLowerCase().includes(debouncedValue.toLowerCase().trim()) ||
+            (e.department ?? "").toLowerCase().includes(debouncedValue.toLowerCase().trim())
+        )
+        .slice(0, 6)
+    : [];
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  return (
+    <div className={`relative flex-1 ${className || ""}`} ref={containerRef}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setIsOpen(true);
+        }}
+        onFocus={() => setIsOpen(true)}
+        placeholder={placeholder}
+        className={inputClassName}
+      />
+
+      <AnimatePresence>
+        {isOpen && debouncedValue.trim().length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 5 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 overflow-hidden text-left"
+          >
+            <div className="px-3 py-2 border-b border-gray-100 bg-[#FAFBFD] flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#1A3C6E]">
+              <span>Exam Suggestions</span>
+              <span>{suggestions.length} matching</span>
+            </div>
+
+            {suggestions.length === 0 ? (
+              <div className="p-4 text-center text-xs text-[#5B6880]">
+                No matching exams found for &ldquo;{debouncedValue.trim()}&rdquo;
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                {suggestions.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      onSelectExam(item.slug);
+                      setIsOpen(false);
+                    }}
+                    className="p-3 hover:bg-[#FFF7F0] cursor-pointer transition-colors flex items-center justify-between gap-3 group"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[10px] font-bold text-[#1A3C6E] bg-blue-50 px-2 py-0.5 rounded">
+                          {item.categories?.name ?? "General"}
+                        </span>
+                        {item.department && (
+                          <span className="text-[11px] text-[#5B6880] truncate">{item.department}</span>
+                        )}
+                      </div>
+                      <p className="text-xs font-bold text-[#0F1C30] group-hover:text-[#FF7A00] transition-colors truncate">
+                        {item.title}
+                      </p>
+                    </div>
+
+                    <div className="text-right flex-shrink-0">
+                      <span className="text-[11px] font-semibold text-[#FF7A00] flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                        View <ChevronRight size={12} />
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ── StatusTag ─────────────────────────────────────────────────────────────────
 
 function StatusTag({ status }: { status: JobStatus }) {
@@ -197,7 +379,7 @@ function Ticker({ items }: { items: string[] }) {
   );
 }
 
-// ── Header Component (Dedicated Routing Fixed) ────────────────────────────────
+// ── Header Component (Fixed State Dropdown & Autocomplete Search) ─────────────
 
 function Header({
   searchQuery,
@@ -205,12 +387,16 @@ function Header({
   selectedState,
   setSelectedState,
   isScrolledPastHero,
+  allExams,
+  dbStates,
 }: {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   selectedState: string;
   setSelectedState: (s: string) => void;
   isScrolledPastHero: boolean;
+  allExams: ExamRow[];
+  dbStates: DbState[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
@@ -260,7 +446,7 @@ function Header({
             </div>
           </Link>
 
-          {/* Docked Search Bar */}
+          {/* Docked Autocomplete Search Bar */}
           <AnimatePresence>
             {shouldShowHeaderSearch && (
               <motion.form
@@ -273,14 +459,16 @@ function Header({
               >
                 <div className="flex items-center flex-1 px-2 gap-1.5 min-w-0">
                   <Search size={15} className="text-[#1A3C6E]/50 flex-shrink-0" />
-                  <input
-                    type="text"
+                  <SearchAutocomplete
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={setSearchQuery}
+                    onSelectExam={(slug) => navigate(`/exam/${slug}`)}
+                    allExams={allExams}
                     placeholder="Search jobs..."
-                    className="outline-none text-[#0F1C30] placeholder-gray-400 text-xs sm:text-sm w-full bg-transparent min-w-0"
+                    inputClassName="outline-none text-[#0F1C30] placeholder-gray-400 text-xs sm:text-sm w-full bg-transparent min-w-0"
                   />
                 </div>
+                {/* Dynamic State Selector (Fix 2) */}
                 <div className="hidden sm:flex items-center gap-1 px-2 border-l border-gray-200">
                   <MapPin size={12} className="text-[#1A3C6E]/50" />
                   <select
@@ -289,10 +477,11 @@ function Header({
                     className="outline-none text-xs text-[#0F1C30] bg-transparent cursor-pointer pr-1"
                   >
                     <option value="All">All States</option>
-                    <option value="Uttar Pradesh">UP</option>
-                    <option value="Rajasthan">Rajasthan</option>
-                    <option value="Bihar">Bihar</option>
-                    <option value="Maharashtra">MH</option>
+                    {dbStates.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <button
@@ -305,7 +494,7 @@ function Header({
             )}
           </AnimatePresence>
 
-          {/* Desktop Nav Links (Updated with Distinct Routes) */}
+          {/* Desktop Nav Links */}
           <nav className="hidden lg:flex items-center gap-1">
             <Link
               to="/"
@@ -403,7 +592,7 @@ function Header({
         </div>
       </div>
 
-      {/* Mobile Menu (Updated with Dedicated Routes) */}
+      {/* Mobile Menu */}
       {menuOpen && (
         <div className="lg:hidden bg-[#122C52] border-t border-white/10 px-4 pb-4">
           <form onSubmit={handleSearchSubmit} className="flex items-center bg-white/10 border border-white/20 rounded-lg mt-3 mb-2 px-3">
@@ -453,12 +642,16 @@ function Hero({
   selectedState,
   setSelectedState,
   isScrolledPastHero,
+  allExams,
+  dbStates,
 }: {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   selectedState: string;
   setSelectedState: (s: string) => void;
   isScrolledPastHero: boolean;
+  allExams: ExamRow[];
+  dbStates: DbState[];
 }) {
   const navigate = useNavigate();
 
@@ -504,7 +697,7 @@ function Hero({
           Real-time alerts for SSC, Railway, Banking, State PSC &amp; Defence exams. Results, Admit Cards, Syllabus — all in one place.
         </p>
 
-        {/* Hero Search Bar */}
+        {/* Hero Autocomplete Search Bar */}
         <div className="min-h-[56px] flex items-center justify-center">
           <AnimatePresence>
             {!isScrolledPastHero && (
@@ -518,26 +711,29 @@ function Hero({
               >
                 <div className="flex items-center flex-1 px-3 gap-2">
                   <Search size={16} className="text-[#1A3C6E]/40 flex-shrink-0" />
-                  <input
-                    type="text"
+                  <SearchAutocomplete
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search by exam name, state, qualification..."
-                    className="outline-none text-[#0F1C30] placeholder-gray-400 text-sm w-full bg-transparent"
+                    onChange={setSearchQuery}
+                    onSelectExam={(slug) => navigate(`/exam/${slug}`)}
+                    allExams={allExams}
+                    placeholder="Search by exam name, department..."
+                    inputClassName="outline-none text-[#0F1C30] placeholder-gray-400 text-sm w-full bg-transparent"
                   />
                 </div>
+                {/* Dynamic State Selector (Fix 2) */}
                 <div className="flex items-center gap-2 px-3 border-t sm:border-t-0 sm:border-l border-gray-100 pt-2 sm:pt-0">
                   <MapPin size={14} className="text-[#1A3C6E]/40" />
                   <select
                     value={selectedState}
                     onChange={(e) => setSelectedState(e.target.value)}
-                    className="outline-none text-sm text-[#0F1C30] bg-transparent pr-2 cursor-pointer"
+                    className="outline-none text-sm text-[#0F1C30] bg-transparent pr-2 cursor-pointer max-w-[140px] truncate"
                   >
                     <option value="All">All States</option>
-                    <option value="Uttar Pradesh">Uttar Pradesh</option>
-                    <option value="Rajasthan">Rajasthan</option>
-                    <option value="Bihar">Bihar</option>
-                    <option value="Maharashtra">Maharashtra</option>
+                    {dbStates.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <button
@@ -561,15 +757,20 @@ function HomeJobListings({
   exams,
   loading,
   error,
+  selectedState,
+  searchQuery,
 }: {
   exams: ExamRow[];
   loading: boolean;
   error: string | null;
+  selectedState: string;
+  searchQuery: string;
 }) {
   const [visibleCount, setVisibleCount] = useState(8);
   const navigate = useNavigate();
 
-  const visible = exams.slice(0, visibleCount);
+  const filteredExams = filterExams(exams, searchQuery, selectedState);
+  const visible = filteredExams.slice(0, visibleCount);
 
   return (
     <section id="latest-jobs" className="max-w-6xl mx-auto px-4 py-12">
@@ -580,6 +781,11 @@ function HomeJobListings({
           </h2>
           <p className="text-[#5B6880] text-sm mt-1">
             Real-time government recruitment announcements
+            {selectedState !== "All" && (
+              <span className="text-[#FF7A00] font-semibold ml-1.5">
+                • Filtered by {selectedState}
+              </span>
+            )}
           </p>
         </div>
         <Link
@@ -606,7 +812,7 @@ function HomeJobListings({
           ))
         ) : visible.length === 0 ? (
           <div className="col-span-full bg-white rounded-2xl border border-gray-100 p-12 text-center text-[#5B6880] text-sm">
-            No active job listings found.
+            No active job listings found for the selected state/search filter.
           </div>
         ) : (
           visible.map((exam) => {
@@ -675,7 +881,7 @@ function HomeJobListings({
         )}
       </div>
 
-      {!loading && exams.length > visibleCount && (
+      {!loading && filteredExams.length > visibleCount && (
         <div className="mt-6 flex justify-center">
           <Link
             to="/latest-jobs"
@@ -696,30 +902,20 @@ function LatestJobsPage({
   loading,
   error,
   allJobTags,
+  selectedState,
 }: {
   exams: ExamRow[];
   loading: boolean;
   error: string | null;
   allJobTags: JobTag[];
+  selectedState: string;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState("All");
   const [visibleCount, setVisibleCount] = useState(12);
   const navigate = useNavigate();
 
-  const filteredExams = exams.filter((e) => {
-    const searchMatch =
-      !searchQuery ||
-      e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (e.department ?? "").toLowerCase().includes(searchQuery.toLowerCase());
-
-    const tagMatch =
-      selectedTag === "All" ||
-      e.exam_job_tags?.some((ejt) => ejt.job_tags?.slug === selectedTag);
-
-    return searchMatch && tagMatch;
-  });
-
+  const filteredExams = filterExams(exams, searchQuery, selectedState, "All", selectedTag);
   const visible = filteredExams.slice(0, visibleCount);
 
   return (
@@ -731,6 +927,11 @@ function LatestJobsPage({
         </h1>
         <p className="text-[#5B6880] text-sm mt-1">
           Explore all active recruitment notifications across India, sorted by date.
+          {selectedState !== "All" && (
+            <span className="text-[#FF7A00] font-semibold ml-1.5">
+              • Showing exams for {selectedState} &amp; All India
+            </span>
+          )}
         </p>
       </div>
 
@@ -1072,12 +1273,14 @@ function CategoryPage({
   catCounts,
   exams,
   loading,
+  selectedState,
 }: {
   categories: DbCategory[];
   allJobTags: JobTag[];
   catCounts: Record<string, number>;
   exams: ExamRow[];
   loading: boolean;
+  selectedState: string;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -1088,24 +1291,7 @@ function CategoryPage({
 
   const categoryChips = ["All", ...categories.map((c) => c.name)];
 
-  const filteredExams = exams.filter((e) => {
-    const catMatch =
-      selectedCategory === "All" ||
-      selectedCategory === "new-jobs" ||
-      e.categories?.name === selectedCategory ||
-      e.categories?.slug === selectedCategory;
-
-    const tagMatch =
-      selectedTag === "All" ||
-      e.exam_job_tags?.some((ejt) => ejt.job_tags?.slug === selectedTag);
-
-    const searchMatch =
-      !searchQuery ||
-      e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (e.department ?? "").toLowerCase().includes(searchQuery.toLowerCase());
-
-    return catMatch && tagMatch && searchMatch;
-  });
+  const filteredExams = filterExams(exams, searchQuery, selectedState, selectedCategory, selectedTag);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -1116,6 +1302,11 @@ function CategoryPage({
         </h1>
         <p className="text-[#5B6880] text-sm mt-1">
           Select a category or job type to quickly find active recruitment notifications.
+          {selectedState !== "All" && (
+            <span className="text-[#FF7A00] font-semibold ml-1.5">
+              • Filtered by {selectedState} &amp; All India
+            </span>
+          )}
         </p>
       </div>
 
@@ -1323,7 +1514,7 @@ function CategoryPage({
   );
 }
 
-// ── Exam Detail Page ─────────────────────────────────────────────────────────
+// ── Exam Detail Page (Fix 3: Contextual Toast Notification) ───────────────────
 
 function ExamDetailPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -1331,6 +1522,7 @@ function ExamDetailPage() {
   const [exam, setExam] = useState<ExamRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const toastShownRef = useRef(false);
 
   useEffect(() => {
     async function fetchExam() {
@@ -1346,6 +1538,33 @@ function ExamDetailPage() {
 
         if (err) throw err;
         setExam(data as any);
+
+        // Show non-blocking toast notification (Fix 3)
+        if (data && !toastShownRef.current) {
+          toastShownRef.current = true;
+          toast.custom((t) => (
+            <div className="bg-[#1A3C6E] text-white p-4 rounded-2xl shadow-2xl border border-white/10 flex items-center justify-between gap-4 max-w-md w-full animate-in fade-in slide-in-from-top-3 duration-200">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-[#FF7A00] flex items-center justify-center flex-shrink-0 text-white shadow-sm">
+                  <Bell size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-[#FFB066] font-bold uppercase tracking-wider">Exam Details</p>
+                  <p className="text-xs font-bold text-white truncate">{data.title}</p>
+                  <p className="text-[11px] text-white/80 mt-0.5">
+                    Last Date to Apply: <span className="text-[#FF7A00] font-bold">{fmtDate(data.application_end)}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => toast.dismiss(t)}
+                className="text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ), { duration: 3500 });
+        }
       } catch (e: any) {
         console.error("Error fetching exam details:", e);
         setError(e.message || "Failed to load exam details.");
@@ -1647,6 +1866,8 @@ function HomeView({
   exams,
   loading,
   error,
+  allExams,
+  dbStates,
 }: {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
@@ -1656,6 +1877,8 @@ function HomeView({
   exams: ExamRow[];
   loading: boolean;
   error: string | null;
+  allExams: ExamRow[];
+  dbStates: DbState[];
 }) {
   return (
     <>
@@ -1665,8 +1888,16 @@ function HomeView({
         selectedState={selectedState}
         setSelectedState={setSelectedState}
         isScrolledPastHero={isScrolledPastHero}
+        allExams={allExams}
+        dbStates={dbStates}
       />
-      <HomeJobListings exams={exams} loading={loading} error={error} />
+      <HomeJobListings
+        exams={exams}
+        loading={loading}
+        error={error}
+        selectedState={selectedState}
+        searchQuery={searchQuery}
+      />
     </>
   );
 }
@@ -1677,6 +1908,7 @@ function AppContent() {
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [categories, setCategories] = useState<DbCategory[]>([]);
   const [allJobTags, setAllJobTags] = useState<JobTag[]>([]);
+  const [dbStates, setDbStates] = useState<DbState[]>([]);
   const [tickerItems, setTickerItems] = useState<string[]>([]);
   const [catCounts, setCatCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -1708,16 +1940,17 @@ function AppContent() {
         let examsData: any[] = [];
         let jobTagsData: any[] = [];
         let catsData: any[] = [];
+        let statesData: any[] = [];
 
-        // Fetch exams
+        // Fetch exams with categories, job tags, and states
         const examsFullRes = await supabase
           .from("exams")
-          .select("id,title,slug,department,qualification,age_limit,description,application_start,application_end,exam_date,status,official_link,vacancy_count,is_all_india,created_at,categories(id,name,slug),exam_job_tags(job_tags(id,name,slug,color))")
+          .select("id,title,slug,department,qualification,age_limit,description,application_start,application_end,exam_date,status,official_link,vacancy_count,is_all_india,created_at,categories(id,name,slug),exam_job_tags(job_tags(id,name,slug,color)),exam_states(states(id,name,code))")
           .order("created_at", { ascending: false })
           .limit(100);
 
         if (examsFullRes.error) {
-          console.warn("[JobAlert] exam_job_tags join failed, falling back:", examsFullRes.error.message);
+          console.warn("[JobAlert] full join failed, falling back:", examsFullRes.error.message);
           const examsBasicRes = await supabase
             .from("exams")
             .select("id,title,slug,department,qualification,age_limit,description,application_start,application_end,exam_date,status,official_link,vacancy_count,is_all_india,created_at,categories(id,name,slug)")
@@ -1740,7 +1973,13 @@ function AppContent() {
           jobTagsData = jobTagsRes.data ?? [];
         }
 
-        // Fetch remaining count metrics & notifications
+        // Fetch states dynamically (Fix 2)
+        const statesRes = await supabase.from("states").select("id,name,code").order("name");
+        if (!statesRes.error) {
+          statesData = statesRes.data ?? [];
+        }
+
+        // Fetch count metrics & notifications
         const [
           notifsRes,
           activeCountRes,
@@ -1762,12 +2001,14 @@ function AppContent() {
         const normalizedExams = examsData.map((e: any) => ({
           ...e,
           exam_job_tags: e.exam_job_tags ?? [],
+          exam_states: e.exam_states ?? [],
           is_all_india: e.is_all_india ?? false,
         })) as ExamRow[];
 
         setExams(normalizedExams);
         setCategories(catsData);
         setAllJobTags(jobTagsData);
+        setDbStates(statesData);
         setTickerItems((notifsRes.data ?? []).map(fmtTicker));
 
         setCatCounts({
@@ -1830,6 +2071,8 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-[#F4F5F7] flex flex-col" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <Toaster position="top-right" />
+
       {/* Shared Fixed Top Header Container */}
       <div ref={headerRef} className="fixed top-0 left-0 right-0 z-50 bg-[#1A3C6E] shadow-lg">
         <Header
@@ -1838,6 +2081,8 @@ function AppContent() {
           selectedState={selectedState}
           setSelectedState={setSelectedState}
           isScrolledPastHero={isScrolledPastHero}
+          allExams={exams}
+          dbStates={dbStates}
         />
         <Ticker items={tickerItems} />
       </div>
@@ -1857,12 +2102,22 @@ function AppContent() {
                 exams={exams}
                 loading={loading}
                 error={error}
+                allExams={exams}
+                dbStates={dbStates}
               />
             }
           />
           <Route
             path="/latest-jobs"
-            element={<LatestJobsPage exams={exams} loading={loading} error={error} allJobTags={allJobTags} />}
+            element={
+              <LatestJobsPage
+                exams={exams}
+                loading={loading}
+                error={error}
+                allJobTags={allJobTags}
+                selectedState={selectedState}
+              />
+            }
           />
           <Route
             path="/category"
@@ -1873,6 +2128,7 @@ function AppContent() {
                 catCounts={catCounts}
                 exams={exams}
                 loading={loading}
+                selectedState={selectedState}
               />
             }
           />
