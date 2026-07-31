@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Exam, Category, State, ExamStatus, JobTag } from '@/lib/types'
+import { Exam, Category, State, ExamStatus, JobTag, ExamDetails } from '@/lib/types'
 import Button from '@/components/ui/Button'
 
 interface ExamFormProps {
@@ -57,6 +57,25 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
     is_all_india: exam?.is_all_india ?? false,
   })
 
+  const [details, setDetails] = useState<ExamDetails>({
+    overview: exam?.details?.overview ?? exam?.description ?? '',
+    vacancy_details: exam?.details?.vacancy_details ?? '',
+    eligibility: exam?.details?.eligibility ?? '',
+    age_limit: exam?.details?.age_limit ?? '',
+    stipend_benefits: exam?.details?.stipend_benefits ?? '',
+    selection_process: exam?.details?.selection_process ?? '',
+    how_to_apply: exam?.details?.how_to_apply ?? '',
+    application_fee: exam?.details?.application_fee ?? '',
+    important_dates_note: exam?.details?.important_dates_note ?? '',
+  })
+
+  type DetailsTab = 'overview' | 'vacancy_details' | 'eligibility' | 'age_limit' | 'stipend_benefits' | 'selection_process' | 'how_to_apply' | 'application_fee' | 'important_dates_note'
+  const [activeDetailsTab, setActiveDetailsTab] = useState<DetailsTab>('overview')
+
+  const setDetailField = (key: keyof ExamDetails, value: string) => {
+    setDetails(prev => ({ ...prev, [key]: value }))
+  }
+
   useEffect(() => {
     supabase.from('states').select('*').order('name').then(({ data }) => setStates(data ?? []))
     supabase.from('job_tags').select('*').order('name').then(({ data }) => setJobTags(data ?? []))
@@ -86,8 +105,22 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
     setLoading(true)
     setError(null)
 
+    if (!form.application_end) {
+      setError('Please select "Last Date to Apply" before saving.')
+      setLoading(false)
+      return
+    }
+
+    if (!form.official_link || !form.official_link.trim()) {
+      setError('Please enter the "Official Website (Apply Link)" before saving.')
+      setLoading(false)
+      return
+    }
+
     const payload = {
       ...form,
+      description: details.overview || form.description,
+      details,
       category_id: form.category_id || null,
       exam_date: form.exam_date || null,
       application_start: form.application_start || null,
@@ -142,10 +175,25 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
 
   const inputCls = INPUT_CLS
 
+  const tabs: { key: DetailsTab; label: string }[] = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'vacancy_details', label: 'Vacancies' },
+    { key: 'eligibility', label: 'Eligibility' },
+    { key: 'age_limit', label: 'Age Limit' },
+    { key: 'selection_process', label: 'Selection' },
+    { key: 'how_to_apply', label: 'How to Apply' },
+    { key: 'stipend_benefits', label: 'Stipend & Perks' },
+    { key: 'application_fee', label: 'App Fee' },
+    { key: 'important_dates_note', label: 'Notes' },
+  ]
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{error}</div>
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg flex items-center gap-2">
+          <span>⚠️</span>
+          <span>{error}</span>
+        </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -169,21 +217,21 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
             {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
           </select>
         </Field>
-        <Field label="Official Website (Apply Link)">
-          <input className={inputCls} value={form.official_link} onChange={e => set('official_link', e.target.value)} placeholder="https://ssc.gov.in" />
-          <p className="text-xs text-[#5B6880] mt-1">This is where users click &ldquo;Apply Now&rdquo;</p>
+        <Field label="Official Website (Apply Link)" required>
+          <input className={inputCls} value={form.official_link} onChange={e => set('official_link', e.target.value)} placeholder="https://ssc.gov.in" required />
+          <p className="text-xs text-[#5B6880] mt-1">Required: Official URL for &ldquo;Apply Now&rdquo;</p>
         </Field>
         <Field label="Qualification">
           <input className={inputCls} value={form.qualification} onChange={e => set('qualification', e.target.value)} placeholder="Graduation" />
         </Field>
-        <Field label="Age Limit">
+        <Field label="Age Limit Summary">
           <input className={inputCls} value={form.age_limit} onChange={e => set('age_limit', e.target.value)} placeholder="18–32 years" />
         </Field>
         <Field label="Application Start">
           <input type="date" className={inputCls} value={form.application_start} onChange={e => set('application_start', e.target.value)} />
         </Field>
-        <Field label="Application End">
-          <input type="date" className={inputCls} value={form.application_end} onChange={e => set('application_end', e.target.value)} />
+        <Field label="Application End (Last Date)" required>
+          <input type="date" className={inputCls} value={form.application_end} onChange={e => set('application_end', e.target.value)} required />
         </Field>
         <Field label="Exam Date">
           <input type="date" className={inputCls} value={form.exam_date} onChange={e => set('exam_date', e.target.value)} />
@@ -194,9 +242,142 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
         </Field>
       </div>
 
-      <Field label="Description">
-        <textarea className={`${inputCls} min-h-24 resize-y`} value={form.description} onChange={e => set('description', e.target.value)} placeholder="Brief description of the exam…" />
-      </Field>
+      {/* Structured Content Tabbed Section Editor */}
+      <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50 space-y-3">
+        <label className="block text-xs font-bold text-[#0F1C30] uppercase tracking-wider">
+          Notification Details &amp; Sections (Structured Content)
+        </label>
+        
+        {/* Tab Bar */}
+        <div className="flex flex-wrap gap-1.5 border-b border-gray-200 pb-2">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveDetailsTab(t.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeDetailsTab === t.key
+                  ? 'bg-[#1A3C6E] text-white shadow-sm'
+                  : 'bg-white text-[#5B6880] hover:text-[#0F1C30] border border-gray-200'
+              }`}
+            >
+              {t.label}
+              {details[t.key]?.trim() && <span className="ml-1 text-[10px] opacity-75">✓</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content Areas */}
+        <div className="bg-white p-3 rounded-lg border border-gray-200">
+          {activeDetailsTab === 'overview' && (
+            <div>
+              <p className="text-xs text-[#5B6880] mb-2 font-medium">Short introduction summary for the recruitment notice:</p>
+              <textarea
+                className={`${inputCls} min-h-28 resize-y`}
+                value={details.overview ?? ''}
+                onChange={e => setDetailField('overview', e.target.value)}
+                placeholder="Official recruitment notification released for SSC CGL 2026..."
+              />
+            </div>
+          )}
+
+          {activeDetailsTab === 'vacancy_details' && (
+            <div>
+              <p className="text-xs text-[#5B6880] mb-2 font-medium">Vacancy distribution by post or category (one item per line for bullet points):</p>
+              <textarea
+                className={`${inputCls} min-h-28 resize-y`}
+                value={details.vacancy_details ?? ''}
+                onChange={e => setDetailField('vacancy_details', e.target.value)}
+                placeholder="• Assistant Section Officer: 1,200 posts&#10;• Inspector of Income Tax: 800 posts&#10;• Executive Assistant: 450 posts"
+              />
+            </div>
+          )}
+
+          {activeDetailsTab === 'eligibility' && (
+            <div>
+              <p className="text-xs text-[#5B6880] mb-2 font-medium">Educational qualification &amp; eligibility conditions (one item per line):</p>
+              <textarea
+                className={`${inputCls} min-h-28 resize-y`}
+                value={details.eligibility ?? ''}
+                onChange={e => setDetailField('eligibility', e.target.value)}
+                placeholder="• Bachelor's Degree in any discipline from a recognized University&#10;• Computer Proficiency Certificate required for specific posts"
+              />
+            </div>
+          )}
+
+          {activeDetailsTab === 'age_limit' && (
+            <div>
+              <p className="text-xs text-[#5B6880] mb-2 font-medium">Age limits, relaxation rules, and cutoff date:</p>
+              <textarea
+                className={`${inputCls} min-h-28 resize-y`}
+                value={details.age_limit ?? ''}
+                onChange={e => setDetailField('age_limit', e.target.value)}
+                placeholder="18 to 32 years as of 01-08-2026. Age relaxation: OBC - 3 years, SC/ST - 5 years, PwD - 10 years."
+              />
+            </div>
+          )}
+
+          {activeDetailsTab === 'selection_process' && (
+            <div>
+              <p className="text-xs text-[#5B6880] mb-2 font-medium">Stages of selection process (one stage per line):</p>
+              <textarea
+                className={`${inputCls} min-h-28 resize-y`}
+                value={details.selection_process ?? ''}
+                onChange={e => setDetailField('selection_process', e.target.value)}
+                placeholder="• Tier 1: Computer Based Examination (Objective)&#10;• Tier 2: Subject-wise Computer Examination&#10;• Document Verification & Medical Exam"
+              />
+            </div>
+          )}
+
+          {activeDetailsTab === 'how_to_apply' && (
+            <div>
+              <p className="text-xs text-[#5B6880] mb-2 font-medium">Step-by-step instructions to submit application online:</p>
+              <textarea
+                className={`${inputCls} min-h-28 resize-y`}
+                value={details.how_to_apply ?? ''}
+                onChange={e => setDetailField('how_to_apply', e.target.value)}
+                placeholder="1. Visit the official portal ssc.gov.in&#10;2. Complete One Time Registration (OTR)&#10;3. Fill application form & upload photo/signature&#10;4. Pay application fee and submit"
+              />
+            </div>
+          )}
+
+          {activeDetailsTab === 'stipend_benefits' && (
+            <div>
+              <p className="text-xs text-[#5B6880] mb-2 font-medium">Salary grade, pay matrix level, allowance &amp; perks:</p>
+              <textarea
+                className={`${inputCls} min-h-28 resize-y`}
+                value={details.stipend_benefits ?? ''}
+                onChange={e => setDetailField('stipend_benefits', e.target.value)}
+                placeholder="Pay Level 7 (Rs. 44,900 to 1,42,400) + HRA, DA, Medical allowance as per Central Govt rules."
+              />
+            </div>
+          )}
+
+          {activeDetailsTab === 'application_fee' && (
+            <div>
+              <p className="text-xs text-[#5B6880] mb-2 font-medium">Category-wise application fee and payment modes:</p>
+              <textarea
+                className={`${inputCls} min-h-28 resize-y`}
+                value={details.application_fee ?? ''}
+                onChange={e => setDetailField('application_fee', e.target.value)}
+                placeholder="General / OBC / EWS: Rs. 100&#10;SC / ST / PwD / Female: Exempted (Nil)"
+              />
+            </div>
+          )}
+
+          {activeDetailsTab === 'important_dates_note' && (
+            <div>
+              <p className="text-xs text-[#5B6880] mb-2 font-medium">Additional schedule notes or helpline details:</p>
+              <textarea
+                className={`${inputCls} min-h-28 resize-y`}
+                value={details.important_dates_note ?? ''}
+                onChange={e => setDetailField('important_dates_note', e.target.value)}
+                placeholder="Correction window will be open for 3 days after application closing date."
+              />
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Job Type Tags */}
       <Field label="Job Type Tags">

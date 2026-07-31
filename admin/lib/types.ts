@@ -25,6 +25,18 @@ export interface State {
   code: string
 }
 
+export interface ExamDetails {
+  overview?: string
+  vacancy_details?: string
+  eligibility?: string
+  age_limit?: string
+  stipend_benefits?: string
+  selection_process?: string
+  how_to_apply?: string
+  application_fee?: string
+  important_dates_note?: string
+}
+
 export interface Exam {
   id: string
   title: string
@@ -32,6 +44,7 @@ export interface Exam {
   category_id: string | null
   department: string | null
   description: string | null
+  details?: ExamDetails | null
   qualification: string | null
   age_limit: string | null
   application_start: string | null

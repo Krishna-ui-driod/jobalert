@@ -38,6 +38,8 @@ import {
   Clock,
   Tag,
   Download,
+  Info,
+  Landmark,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
@@ -56,6 +58,18 @@ interface DbState {
   code: string;
 }
 
+interface ExamDetails {
+  overview?: string;
+  vacancy_details?: string;
+  eligibility?: string;
+  age_limit?: string;
+  stipend_benefits?: string;
+  selection_process?: string;
+  how_to_apply?: string;
+  application_fee?: string;
+  important_dates_note?: string;
+}
+
 interface ExamRow {
   id: string;
   title: string;
@@ -64,6 +78,7 @@ interface ExamRow {
   qualification: string | null;
   age_limit: string | null;
   description: string | null;
+  details?: ExamDetails | null;
   application_start: string | null;
   application_end: string | null;
   exam_date: string | null;
@@ -1701,7 +1716,6 @@ function ExamDetailPage() {
         if (err) throw err;
         setExam(data as any);
 
-        // Show non-blocking toast notification (Fix 3)
         if (data && !toastShownRef.current) {
           toastShownRef.current = true;
           toast.custom((t) => (
@@ -1727,21 +1741,21 @@ function ExamDetailPage() {
             </div>
           ), { duration: 3500 });
         }
-      } catch (e: any) {
-        console.error("Error fetching exam details:", e);
-        setError(e.message || "Failed to load exam details.");
+      } catch (err: any) {
+        console.error("Error loading exam detail:", err);
+        setError("Could not load exam details. Please refresh or try again.");
       } finally {
         setLoading(false);
       }
     }
-    fetchExam();
+    if (slug) loadExam();
   }, [slug]);
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
-        <div className="animate-spin w-8 h-8 border-4 border-[#FF7A00] border-t-transparent rounded-full mx-auto mb-4" />
-        <p className="text-[#5B6880] text-sm font-medium">Loading exam details...</p>
+      <div className="max-w-4xl mx-auto px-4 py-16 text-center text-[#5B6880]">
+        <div className="w-10 h-10 border-4 border-[#1A3C6E] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="font-semibold text-sm">Loading exam details...</p>
       </div>
     );
   }
@@ -1826,8 +1840,8 @@ function ExamDetailPage() {
             <Briefcase size={20} />
           </div>
           <span className="text-xs text-[#5B6880] block font-medium">Total Posts</span>
-          <span className="text-lg font-bold text-[#0F1C30]">
-            {exam.vacancy_count ? exam.vacancy_count.toLocaleString("en-IN") : "—"}
+          <span className="text-sm md:text-base font-bold text-[#0F1C30]">
+            {exam.vacancy_count ? exam.vacancy_count.toLocaleString("en-IN") : "Not specified"}
           </span>
         </div>
 
@@ -1837,7 +1851,7 @@ function ExamDetailPage() {
           </div>
           <span className="text-xs text-[#5B6880] block font-medium">Last Date to Apply</span>
           <span className={`text-sm font-bold ${jobStatus === "closing-soon" ? "text-[#E03E3E]" : "text-[#0F1C30]"}`}>
-            {fmtDate(exam.application_end)}
+            {exam.application_end ? fmtDate(exam.application_end) : "Not specified"}
           </span>
         </div>
 
@@ -1846,7 +1860,7 @@ function ExamDetailPage() {
             <GraduationCap size={20} />
           </div>
           <span className="text-xs text-[#5B6880] block font-medium">Qualification</span>
-          <span className="text-sm font-bold text-[#0F1C30]">{exam.qualification || "—"}</span>
+          <span className="text-sm font-bold text-[#0F1C30]">{exam.qualification || "Not specified"}</span>
         </div>
 
         <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
@@ -1854,7 +1868,7 @@ function ExamDetailPage() {
             <Tag size={20} />
           </div>
           <span className="text-xs text-[#5B6880] block font-medium">Age Limit</span>
-          <span className="text-sm font-bold text-[#0F1C30]">{exam.age_limit || "—"}</span>
+          <span className="text-sm font-bold text-[#0F1C30]">{exam.age_limit || "Not specified"}</span>
         </div>
       </div>
 
@@ -1867,15 +1881,15 @@ function ExamDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="p-3.5 bg-gray-50 rounded-xl">
             <span className="text-xs text-[#5B6880] block font-medium">Application Start</span>
-            <span className="text-sm font-bold text-[#0F1C30]">{fmtDate(exam.application_start)}</span>
+            <span className="text-sm font-bold text-[#0F1C30]">{exam.application_start ? fmtDate(exam.application_start) : "To be updated"}</span>
           </div>
           <div className="p-3.5 bg-gray-50 rounded-xl">
             <span className="text-xs text-[#5B6880] block font-medium">Application End</span>
-            <span className="text-sm font-bold text-[#0F1C30]">{fmtDate(exam.application_end)}</span>
+            <span className="text-sm font-bold text-[#0F1C30]">{exam.application_end ? fmtDate(exam.application_end) : "Not specified"}</span>
           </div>
           <div className="p-3.5 bg-gray-50 rounded-xl">
             <span className="text-xs text-[#5B6880] block font-medium">Exam Date</span>
-            <span className="text-sm font-bold text-[#0F1C30]">{fmtDate(exam.exam_date)}</span>
+            <span className="text-sm font-bold text-[#0F1C30]">{exam.exam_date ? fmtDate(exam.exam_date) : "Not announced yet"}</span>
           </div>
         </div>
 
@@ -1891,28 +1905,85 @@ function ExamDetailPage() {
           </a>
         ) : (
           <button disabled className="w-full py-3.5 bg-gray-100 text-gray-400 font-bold rounded-xl cursor-not-allowed text-center text-sm">
-            Official Application Link Not Provided
+            Link not available — check back soon
           </button>
         )}
       </div>
 
-      {/* Dynamic Description / Multi-Paragraph Content Section */}
-      <div className="bg-white rounded-2xl border border-[#1A3C6E]/10 shadow-sm p-6 md:p-8">
-        <h3 className="text-lg font-bold text-[#0F1C30] mb-3">Notification Details &amp; Overview</h3>
-        {exam.description ? (
-          <div className="text-[#0F1C30] text-sm leading-relaxed whitespace-pre-line">{exam.description}</div>
+      {/* Notification Details & Structured Accordions */}
+      <div className="mb-6">
+        <h3 className="text-xl font-bold text-[#0F1C30] mb-4 flex items-center gap-2">
+          <FileText size={20} className="text-[#FF7A00]" /> Notification Details &amp; Overview
+        </h3>
+
+        {exam.details && Object.values(exam.details).some((v) => v && typeof v === "string" && v.trim().length > 0) ? (
+          <>
+            <AccordionItem
+              title="Overview & Introduction"
+              content={exam.details.overview || exam.description}
+              defaultOpen={true}
+              icon={Info}
+            />
+            <AccordionItem
+              title="Eligibility Criteria"
+              content={exam.details.eligibility}
+              defaultOpen={true}
+              icon={GraduationCap}
+            />
+            <AccordionItem
+              title="Vacancy Breakdown & Posts"
+              content={exam.details.vacancy_details}
+              defaultOpen={false}
+              icon={Briefcase}
+            />
+            <AccordionItem
+              title="Age Limit & Relaxations"
+              content={exam.details.age_limit}
+              defaultOpen={false}
+              icon={Tag}
+            />
+            <AccordionItem
+              title="Selection Process"
+              content={exam.details.selection_process}
+              defaultOpen={false}
+              icon={CheckSquare}
+            />
+            <AccordionItem
+              title="How to Apply"
+              content={exam.details.how_to_apply}
+              defaultOpen={false}
+              icon={ClipboardList}
+            />
+            <AccordionItem
+              title="Stipend, Salary & Benefits"
+              content={exam.details.stipend_benefits}
+              defaultOpen={false}
+              icon={Landmark}
+            />
+            <AccordionItem
+              title="Application Fee"
+              content={exam.details.application_fee}
+              defaultOpen={false}
+              icon={AlertCircle}
+            />
+            <AccordionItem
+              title="Important Notes & Schedule"
+              content={exam.details.important_dates_note}
+              defaultOpen={false}
+              icon={Calendar}
+            />
+          </>
         ) : (
-          <div className="text-[#5B6880] text-sm leading-relaxed space-y-3">
-            <p>
-              Official recruitment notification released for <span className="font-semibold text-[#0F1C30]">{exam.title}</span>
-              {exam.department ? ` by ${exam.department}` : ""}. Candidates meeting the eligibility requirements can register and submit their applications online before the specified closing date.
-            </p>
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-[#1A3C6E] space-y-1">
-              <p><span className="font-bold">Qualification:</span> {exam.qualification || "Refer to official advertisement"}</p>
-              <p><span className="font-bold">Age Limit:</span> {exam.age_limit || "As per government guidelines"}</p>
-              <p><span className="font-bold">Total Vacancies:</span> {exam.vacancy_count ? exam.vacancy_count.toLocaleString("en-IN") : "Specified in official PDF"}</p>
-            </div>
-          </div>
+          /* Graceful Fallback for Legacy Plain Text Description */
+          <AccordionItem
+            title="Overview & Details"
+            content={
+              exam.description ||
+              `Official recruitment notification released for ${exam.title}${exam.department ? ` by ${exam.department}` : ""}. Candidates meeting the eligibility requirements can submit online applications before the closing date.`
+            }
+            defaultOpen={true}
+            icon={Info}
+          />
         )}
       </div>
     </div>
@@ -2107,7 +2178,7 @@ function AppContent() {
         // Fetch exams with categories, job tags, and states
         const examsFullRes = await supabase
           .from("exams")
-          .select("id,title,slug,department,qualification,age_limit,description,application_start,application_end,exam_date,status,official_link,vacancy_count,is_all_india,created_at,categories(id,name,slug),exam_job_tags(job_tags(id,name,slug,color)),exam_states(states(id,name,code))")
+          .select("id,title,slug,department,qualification,age_limit,description,details,application_start,application_end,exam_date,status,official_link,vacancy_count,is_all_india,created_at,categories(id,name,slug),exam_job_tags(job_tags(id,name,slug,color)),exam_states(states(id,name,code))")
           .order("created_at", { ascending: false })
           .limit(100);
 
@@ -2115,7 +2186,7 @@ function AppContent() {
           console.warn("[JobAlert] full join failed, falling back:", examsFullRes.error.message);
           const examsBasicRes = await supabase
             .from("exams")
-            .select("id,title,slug,department,qualification,age_limit,description,application_start,application_end,exam_date,status,official_link,vacancy_count,is_all_india,created_at,categories(id,name,slug)")
+            .select("id,title,slug,department,qualification,age_limit,description,details,application_start,application_end,exam_date,status,official_link,vacancy_count,is_all_india,created_at,categories(id,name,slug)")
             .order("created_at", { ascending: false })
             .limit(100);
           if (examsBasicRes.error) throw examsBasicRes.error;

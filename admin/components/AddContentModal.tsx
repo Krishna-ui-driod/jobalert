@@ -165,6 +165,14 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
     try {
       if (contentType === 'new_exam') {
         // ──── Save exam ────
+        if (!examForm.application_end) {
+          throw new Error('Please select "Last Date to Apply" before saving.')
+        }
+
+        if (!examForm.official_link || !examForm.official_link.trim()) {
+          throw new Error('Please enter the "Official Website (Apply Link)" before saving.')
+        }
+
         const payload = {
           ...examForm,
           category_id: examForm.category_id || null,
@@ -324,8 +332,8 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
                       {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
                     </select>
                   </Field>
-                  <Field label="Official Website (Apply Link)" hint="This is where users click &ldquo;Apply Now&rdquo;">
-                    <input className={INPUT_CLS} value={examForm.official_link} onChange={e => setExamField('official_link', e.target.value)} placeholder="https://ssc.gov.in" />
+                  <Field label="Official Website (Apply Link)" required hint="This is where users click &ldquo;Apply Now&rdquo;">
+                    <input className={INPUT_CLS} value={examForm.official_link} onChange={e => setExamField('official_link', e.target.value)} placeholder="https://ssc.gov.in" required />
                   </Field>
                   <Field label="Qualification">
                     <input className={INPUT_CLS} value={examForm.qualification} onChange={e => setExamField('qualification', e.target.value)} placeholder="Graduation" />
@@ -336,8 +344,8 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
                   <Field label="Application Start">
                     <input type="date" className={INPUT_CLS} value={examForm.application_start} onChange={e => setExamField('application_start', e.target.value)} />
                   </Field>
-                  <Field label="Application End">
-                    <input type="date" className={INPUT_CLS} value={examForm.application_end} onChange={e => setExamField('application_end', e.target.value)} />
+                  <Field label="Application End (Last Date)" required>
+                    <input type="date" className={INPUT_CLS} value={examForm.application_end} onChange={e => setExamField('application_end', e.target.value)} required />
                   </Field>
                   <Field label="Exam Date">
                     <input type="date" className={INPUT_CLS} value={examForm.exam_date} onChange={e => setExamField('exam_date', e.target.value)} />
