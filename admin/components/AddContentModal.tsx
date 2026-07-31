@@ -94,6 +94,7 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
     status: 'upcoming' as ExamStatus,
     official_link: '',
     is_all_india: false,
+    vacancy_count: '',
   })
 
   // ── Notification form state ──
@@ -125,6 +126,7 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
       title: '', slug: '', category_id: '', department: '', description: '',
       qualification: '', age_limit: '', application_start: '', application_end: '',
       exam_date: '', status: 'upcoming', official_link: '', is_all_india: false,
+      vacancy_count: '',
     })
     setSelectedExam(null)
     setExamSearch('')
@@ -175,6 +177,7 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
 
         const payload = {
           ...examForm,
+          vacancy_count: examForm.vacancy_count !== '' && examForm.vacancy_count !== null ? Number(examForm.vacancy_count) : null,
           category_id: examForm.category_id || null,
           exam_date: examForm.exam_date || null,
           application_start: examForm.application_start || null,
@@ -338,8 +341,11 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
                   <Field label="Qualification">
                     <input className={INPUT_CLS} value={examForm.qualification} onChange={e => setExamField('qualification', e.target.value)} placeholder="Graduation" />
                   </Field>
-                  <Field label="Age Limit">
+                  <Field label="Age Limit Summary">
                     <input className={INPUT_CLS} value={examForm.age_limit} onChange={e => setExamField('age_limit', e.target.value)} placeholder="18–32 years" />
+                  </Field>
+                  <Field label="Total Posts / Vacancies">
+                    <input type="number" min="0" className={INPUT_CLS} value={examForm.vacancy_count} onChange={e => setExamField('vacancy_count', e.target.value)} placeholder="e.g. 17727 (Leave empty if not announced)" />
                   </Field>
                   <Field label="Application Start">
                     <input type="date" className={INPUT_CLS} value={examForm.application_start} onChange={e => setExamField('application_start', e.target.value)} />

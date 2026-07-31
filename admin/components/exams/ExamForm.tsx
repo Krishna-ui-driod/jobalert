@@ -55,6 +55,7 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
     status: exam?.status ?? 'upcoming' as ExamStatus,
     official_link: exam?.official_link ?? '',
     is_all_india: exam?.is_all_india ?? false,
+    vacancy_count: exam?.vacancy_count ?? '',
   })
 
   const [details, setDetails] = useState<ExamDetails>({
@@ -119,6 +120,7 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
 
     const payload = {
       ...form,
+      vacancy_count: form.vacancy_count !== '' && form.vacancy_count !== null ? Number(form.vacancy_count) : null,
       description: details.overview || form.description,
       details,
       category_id: form.category_id || null,
@@ -226,6 +228,9 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
         </Field>
         <Field label="Age Limit Summary">
           <input className={inputCls} value={form.age_limit} onChange={e => set('age_limit', e.target.value)} placeholder="18–32 years" />
+        </Field>
+        <Field label="Total Posts / Vacancies">
+          <input type="number" min="0" className={inputCls} value={form.vacancy_count} onChange={e => set('vacancy_count', e.target.value)} placeholder="e.g. 17727 (Leave empty if not announced)" />
         </Field>
         <Field label="Application Start">
           <input type="date" className={inputCls} value={form.application_start} onChange={e => set('application_start', e.target.value)} />
