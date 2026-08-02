@@ -1,85 +1,169 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Exam, Category } from '@/lib/types'
+import { Exam, Notification } from '@/lib/types'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import ExamForm from './ExamForm'
-import { Search, Pencil, Trash2, RefreshCw } from 'lucide-react'
+import { Search, Pencil, Trash2, RefreshCw, FileText, Bell, Download } from 'lucide-react'
 
-const STATUSES: { value: string; label: string }[] = [
-  { value: '', label: 'All Statuses' },
-  { value: 'upcoming', label: 'Upcoming' },
-  { value: 'active', label: 'Active' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'result_declared', label: 'Result Declared' },
+export interface UnifiedListing {
+  id: string
+  source: 'exam' | 'notification'
+  contentType: string // 'exam' | 'result' | 'admit_card' | 'answer_key' | 'syllabus' | 'new_job'
+  typeLabel: string
+  title: string
+  subtitle?: string
+  dateDisplay: string
+  status?: string
+  pdf_url?: string
+  official_link?: string
+  created_at: string
+  originalExam?: Exam
+  originalNotif?: Notification
+}
+
+const TYPE_OPTIONS = [
+  { value: 'all', label: 'All Types' },
+  { value: 'exam', label: 'Exams' },
+  { value: 'result', label: 'Results' },
+  { value: 'admit_card', label: 'Admit Cards' },
+  { value: 'syllabus', label: 'Syllabus' },
+  { value: 'answer_key', label: 'Answer Keys' },
 ]
 
 export default function ExamsTable() {
   const supabase = createClient()
-  const [exams, setExams] = useState<Exam[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
+  const [listings, setListings] = useState<UnifiedListing[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('')
-  const [sortField, setSortField] = useState<'title' | 'created_at' | 'application_end'>('created_at')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [typeFilter, setTypeFilter] = useState('all')
+
   const [modalOpen, setModalOpen] = useState(false)
   const [editExam, setEditExam] = useState<Exam | null>(null)
-  const [deleteId, setDeleteId] = useState<string | null>(null)
+  
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; source: 'exam' | 'notification'; title: string } | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    let query = supabase
-      .from('exams')
-      .select('*, categories(id,name,slug,icon)')
-      .order(sortField, { ascending: sortDir === 'asc' })
+    try {
+      const [examsRes, notifsRes] = await Promise.all([
+        supabase.from('exams').select('*, categories(id,name,slug)').order('created_at', { ascending: false }),
+        supabase.from('notifications').select('*, exams(title)').order('published_at', { ascending: false }),
+      ])
 
-    if (statusFilter) query = query.eq('status', statusFilter)
-    if (categoryFilter) query = query.eq('category_id', categoryFilter)
+      const examItems: UnifiedListing[] = (examsRes.data ?? []).map(e => ({
+        id: e.id,
+        source: 'exam',
+        contentType: 'exam',
+        typeLabel: 'Exam Notification',
+        title: e.title,
+        subtitle: e.department || e.categories?.name || 'Recruitment Exam',
+        dateDisplay: e.application_end ? `End: ${e.application_end}` : 'Date: Pending',
+        status: e.status,
+        official_link: e.official_link,
+        created_at: e.created_at,
+        originalExam: e,
+      }))
 
-    const { data } = await query
-    setExams(data ?? [])
-    setLoading(false)
-  }, [sortField, sortDir, statusFilter, categoryFilter])
+      const notifItems: UnifiedListing[] = (notifsRes.data ?? []).map(n => {
+        let label = 'Notification'
+        if (n.type === 'result') label = 'Result'
+        else if (n.type === 'admit_card') label = 'Admit Card'
+        else if (n.type === 'answer_key') label = 'Answer Key'
+        else if (n.type === 'syllabus') label = 'Syllabus'
+        else if (n.type === 'new_job') label = 'New Job Alert'
+
+        return {
+          id: n.id,
+          source: 'notification',
+          contentType: n.type,
+          typeLabel: label,
+          title: n.title,
+          subtitle: (n as any).exams?.title ? `Linked to: ${(n as any).exams.title}` : 'General Alert',
+          dateDisplay: `Published: ${new Date(n.published_at).toLocaleDateString('en-IN')}`,
+          pdf_url: n.pdf_url,
+          created_at: n.published_at,
+          originalNotif: n,
+        }
+      })
+
+      const combined = [...examItems, ...notifItems].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+
+      setListings(combined)
+    } catch (err: any) {
+      console.error('Failed to load unified listings:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     fetchData()
-    supabase.from('categories').select('*').then(({ data }) => setCategories(data ?? []))
   }, [fetchData])
 
-  const filtered = exams.filter(e =>
-    e.title.toLowerCase().includes(search.toLowerCase()) ||
-    (e.department ?? '').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = listings.filter(item => {
+    const matchesSearch =
+      item.title.toLowerCase().includes(search.toLowerCase()) ||
+      (item.subtitle ?? '').toLowerCase().includes(search.toLowerCase())
 
-  const handleSort = (field: typeof sortField) => {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortField(field); setSortDir('asc') }
-  }
+    const matchesType =
+      typeFilter === 'all' ||
+      (typeFilter === 'exam' && item.source === 'exam') ||
+      (typeFilter !== 'exam' && item.contentType === typeFilter)
+
+    return matchesSearch && matchesType
+  })
 
   const handleDelete = async () => {
-    if (!deleteId) return
+    if (!deleteTarget) return
     setDeleteLoading(true)
-    await supabase.from('exams').delete().eq('id', deleteId)
-    setDeleteId(null)
-    setDeleteLoading(false)
-    fetchData()
+    try {
+      if (deleteTarget.source === 'exam') {
+        await supabase.from('exams').delete().eq('id', deleteTarget.id)
+      } else {
+        await supabase.from('notifications').delete().eq('id', deleteTarget.id)
+      }
+      setDeleteTarget(null)
+      fetchData()
+    } catch (err: any) {
+      alert(`Delete failed: ${err.message}`)
+    } finally {
+      setDeleteLoading(false)
+    }
   }
 
-  const SortIcon = ({ field }: { field: string }) =>
-    sortField === field ? (sortDir === 'asc' ? <span>↑</span> : <span>↓</span>) : <span className="text-gray-300">↕</span>
+  const renderBadge = (item: UnifiedListing) => {
+    if (item.source === 'exam') {
+      return <Badge status={item.status as any} />
+    }
+    const colors: Record<string, string> = {
+      result: 'bg-green-100 text-green-700 border-green-200',
+      admit_card: 'bg-blue-100 text-blue-700 border-blue-200',
+      answer_key: 'bg-purple-100 text-purple-700 border-purple-200',
+      syllabus: 'bg-amber-100 text-amber-800 border-amber-200',
+      new_job: 'bg-orange-100 text-orange-700 border-orange-200',
+    }
+    return (
+      <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${colors[item.contentType] ?? 'bg-gray-100 text-gray-700'}`}>
+        ● {item.typeLabel}
+      </span>
+    )
+  }
 
   return (
     <div className="p-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-[#0F1C30] font-bold text-2xl">Exams</h1>
-          <p className="text-[#5B6880] text-sm mt-1">{filtered.length} exam{filtered.length !== 1 ? 's' : ''} found</p>
+          <h1 className="text-[#0F1C30] font-bold text-2xl">Content Listings</h1>
+          <p className="text-[#5B6880] text-sm mt-1">
+            Manage all recruitment exams and posted notifications in one place ({filtered.length} item{filtered.length !== 1 ? 's' : ''})
+          </p>
         </div>
       </div>
 
@@ -90,25 +174,22 @@ export default function ExamsTable() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search exams or department…"
+            placeholder="Search by title, department, or linked exam…"
             className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#1A3C6E] focus:ring-2 focus:ring-[#1A3C6E]/10"
           />
         </div>
+        
+        {/* Content Type Filter */}
         <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#0F1C30] outline-none focus:border-[#1A3C6E]"
+          value={typeFilter}
+          onChange={e => setTypeFilter(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#0F1C30] outline-none focus:border-[#1A3C6E] font-medium"
         >
-          {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          {TYPE_OPTIONS.map(t => (
+            <option key={t.value} value={t.value}>{t.label}</option>
+          ))}
         </select>
-        <select
-          value={categoryFilter}
-          onChange={e => setCategoryFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#0F1C30] outline-none focus:border-[#1A3C6E]"
-        >
-          <option value="">All Categories</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+
         <Button variant="ghost" size="sm" onClick={fetchData} className="gap-1.5">
           <RefreshCw size={14} /> Refresh
         </Button>
@@ -117,52 +198,74 @@ export default function ExamsTable() {
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-[#5B6880] text-sm">Loading…</div>
+          <div className="flex items-center justify-center py-16 text-[#5B6880] text-sm">Loading listings…</div>
         ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center py-16 text-[#5B6880] text-sm">No exams found.</div>
+          <div className="flex flex-col items-center justify-center py-16 gap-2 text-[#5B6880] text-sm">
+            <FileText size={32} className="text-gray-300 mb-1" />
+            <p className="font-semibold text-[#0F1C30]">No matching listings found.</p>
+            <p className="text-xs text-[#5B6880]">Try adjusting your search query or type filter.</p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="bg-[#EEF2F8] border-b border-gray-100">
-                  <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-5 py-3.5 cursor-pointer hover:text-[#FF7A00]" onClick={() => handleSort('title')}>
-                    Title <SortIcon field="title" />
+                  <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-5 py-3.5">
+                    Listing Title &amp; Details
                   </th>
-                  <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-4 py-3.5">Category</th>
-                  <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-4 py-3.5 cursor-pointer hover:text-[#FF7A00]" onClick={() => handleSort('application_end')}>
-                    Last Date <SortIcon field="application_end" />
+                  <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-4 py-3.5">
+                    Type
                   </th>
-                  <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-4 py-3.5">Status</th>
-                  <th className="px-4 py-3.5 text-xs font-bold text-[#1A3C6E] uppercase tracking-wider cursor-pointer hover:text-[#FF7A00]" onClick={() => handleSort('created_at')}>
-                    Created <SortIcon field="created_at" />
+                  <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-4 py-3.5">
+                    Status / Details
+                  </th>
+                  <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-4 py-3.5">
+                    Date
                   </th>
                   <th className="px-4 py-3.5" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((exam, i) => (
-                  <tr key={exam.id} className={`group hover:bg-[#FFF7F0] transition-colors ${i % 2 ? 'bg-[#FAFBFD]' : ''}`}>
+                {filtered.map((item, i) => (
+                  <tr key={`${item.source}-${item.id}`} className={`group hover:bg-[#FFF7F0] transition-colors ${i % 2 ? 'bg-[#FAFBFD]' : ''}`}>
                     <td className="px-5 py-4">
-                      <p className="font-semibold text-[#0F1C30] text-sm">{exam.title}</p>
-                      <p className="text-[#5B6880] text-xs mt-0.5">{exam.department ?? '—'}</p>
+                      <div className="flex items-start gap-2.5">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                          item.source === 'exam' ? 'bg-[#1A3C6E]/10 text-[#1A3C6E]' : 'bg-[#FF7A00]/10 text-[#FF7A00]'
+                        }`}>
+                          {item.source === 'exam' ? <FileText size={14} /> : <Bell size={14} />}
+                        </div>
+                        <div>
+                          <p className="font-bold text-[#0F1C30] text-sm leading-snug">{item.title}</p>
+                          <p className="text-[#5B6880] text-xs mt-0.5">{item.subtitle}</p>
+                          {item.pdf_url && (
+                            <a href={item.pdf_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-bold text-[#FF7A00] hover:underline mt-1">
+                              <Download size={11} /> Download PDF
+                            </a>
+                          )}
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-4 py-4 text-sm text-[#5B6880]">{(exam as any).categories?.name ?? '—'}</td>
-                    <td className="px-4 py-4 text-sm text-[#5B6880]">{exam.application_end ?? '—'}</td>
-                    <td className="px-4 py-4"><Badge status={exam.status} /></td>
-                    <td className="px-4 py-4 text-xs text-[#5B6880]">{new Date(exam.created_at).toLocaleDateString('en-IN')}</td>
+                    <td className="px-4 py-4">{renderBadge(item)}</td>
+                    <td className="px-4 py-4 text-xs font-medium text-[#5B6880]">{item.dateDisplay}</td>
+                    <td className="px-4 py-4 text-xs text-[#5B6880]">
+                      {new Date(item.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </td>
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {item.source === 'exam' && (
+                          <button
+                            onClick={() => { setEditExam(item.originalExam!); setModalOpen(true) }}
+                            className="p-1.5 text-[#1A3C6E] hover:bg-[#EEF2F8] rounded-lg transition-colors"
+                            title="Edit Exam"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                        )}
                         <button
-                          onClick={() => { setEditExam(exam); setModalOpen(true) }}
-                          className="p-1.5 text-[#1A3C6E] hover:bg-[#EEF2F8] rounded-lg transition-colors"
-                          title="Edit"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          onClick={() => setDeleteId(exam.id)}
+                          onClick={() => setDeleteTarget({ id: item.id, source: item.source, title: item.title })}
                           className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete"
+                          title="Delete Listing"
                         >
                           <Trash2 size={15} />
                         </button>
@@ -176,28 +279,31 @@ export default function ExamsTable() {
         )}
       </div>
 
-      {/* Add / Edit Modal */}
+      {/* Edit Modal (for Exam edits) */}
       <Modal
         open={modalOpen}
         onClose={() => { setModalOpen(false); setEditExam(null) }}
-        title={editExam ? 'Edit Exam' : 'Add New Exam'}
+        title="Edit Exam Listing"
         width="max-w-3xl"
       >
         <ExamForm
           exam={editExam}
-          categories={categories}
+          categories={[]}
           onSuccess={() => { setModalOpen(false); setEditExam(null); fetchData() }}
           onCancel={() => { setModalOpen(false); setEditExam(null) }}
         />
       </Modal>
 
-      {/* Delete confirm */}
-      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete Exam">
-        <p className="text-[#5B6880] text-sm mb-6">
-          Are you sure you want to delete this exam? This will also remove all linked notifications and exam-state relationships.
+      {/* Delete Confirmation Modal */}
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Listing">
+        <p className="text-[#5B6880] text-sm mb-2 font-medium">
+          Are you sure you want to delete: <span className="font-bold text-[#0F1C30]">{deleteTarget?.title}</span>?
+        </p>
+        <p className="text-xs text-red-500 mb-6">
+          This action will permanently delete this {deleteTarget?.source} record.
         </p>
         <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={() => setDeleteId(null)}>Cancel</Button>
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
           <Button variant="danger" onClick={handleDelete} disabled={deleteLoading}>
             {deleteLoading ? 'Deleting…' : 'Delete'}
           </Button>

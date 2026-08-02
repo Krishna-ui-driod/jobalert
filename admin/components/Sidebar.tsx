@@ -9,11 +9,10 @@ import { createClient } from '@/lib/supabase/client'
 import AddContentModal from './AddContentModal'
 
 const NAV = [
-  { href: '/admin/dashboard',      label: 'Dashboard',      icon: LayoutDashboard },
-  { href: '/admin/exams',          label: 'Exams',          icon: FileText },
-  { href: '/admin/notifications',  label: 'Notifications',  icon: Bell },
-  { href: '/admin/subscribers',    label: 'Subscribers',    icon: Users },
-  { href: '/admin/settings',       label: 'Settings',       icon: Settings },
+  { href: '/admin/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
+  { href: '/admin/exams',       label: 'Listings',    icon: FileText },
+  { href: '/admin/subscribers', label: 'Subscribers', icon: Users },
+  { href: '/admin/settings',    label: 'Settings',    icon: Settings },
 ]
 
 export default function Sidebar() {

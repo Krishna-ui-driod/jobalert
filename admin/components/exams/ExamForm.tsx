@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Exam, Category, State, ExamStatus, JobTag, ExamDetails } from '@/lib/types'
+import { Exam, Category, State, ExamStatus, JobTag } from '@/lib/types'
 import Button from '@/components/ui/Button'
 
 interface ExamFormProps {
@@ -58,24 +58,6 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
     vacancy_count: exam?.vacancy_count ?? '',
   })
 
-  const [details, setDetails] = useState<ExamDetails>({
-    overview: exam?.details?.overview ?? exam?.description ?? '',
-    vacancy_details: exam?.details?.vacancy_details ?? '',
-    eligibility: exam?.details?.eligibility ?? '',
-    age_limit: exam?.details?.age_limit ?? '',
-    stipend_benefits: exam?.details?.stipend_benefits ?? '',
-    selection_process: exam?.details?.selection_process ?? '',
-    how_to_apply: exam?.details?.how_to_apply ?? '',
-    application_fee: exam?.details?.application_fee ?? '',
-    important_dates_note: exam?.details?.important_dates_note ?? '',
-  })
-
-  type DetailsTab = 'overview' | 'vacancy_details' | 'eligibility' | 'age_limit' | 'stipend_benefits' | 'selection_process' | 'how_to_apply' | 'application_fee' | 'important_dates_note'
-  const [activeDetailsTab, setActiveDetailsTab] = useState<DetailsTab>('overview')
-
-  const setDetailField = (key: keyof ExamDetails, value: string) => {
-    setDetails(prev => ({ ...prev, [key]: value }))
-  }
 
   useEffect(() => {
     supabase.from('states').select('*').order('name').then(({ data }) => setStates(data ?? []))
@@ -101,32 +83,52 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
   const toggleJobTag = (id: string) =>
     setSelectedJobTags(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])
 
+  const [newTagModalOpen, setNewTagModalOpen] = useState(false)
+  const [newTagName, setNewTagName] = useState('')
+  const [newTagColor, setNewTagColor] = useState('#1A3C6E')
+  const [creatingTag, setCreatingTag] = useState(false)
+
+  const [notAnnouncedAppEnd, setNotAnnouncedAppEnd] = useState(!exam?.application_end)
+  const [pendingOfficialLink, setPendingOfficialLink] = useState(!exam?.official_link)
+
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) return
+    setCreatingTag(true)
+    try {
+      const slug = slugify(newTagName)
+      const { data, error } = await supabase
+        .from('job_tags')
+        .insert({ name: newTagName.trim(), slug, color: newTagColor })
+        .select()
+        .single()
+      if (error) throw error
+      if (data) {
+        setJobTags(prev => [...prev, data])
+        setSelectedJobTags(prev => [...prev, data.id])
+        setNewTagName('')
+        setNewTagModalOpen(false)
+      }
+    } catch (err: any) {
+      alert(`Error creating tag: ${err.message}`)
+    } finally {
+      setCreatingTag(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
-    if (!form.application_end) {
-      setError('Please select "Last Date to Apply" before saving.')
-      setLoading(false)
-      return
-    }
-
-    if (!form.official_link || !form.official_link.trim()) {
-      setError('Please enter the "Official Website (Apply Link)" before saving.')
-      setLoading(false)
-      return
-    }
-
     const payload = {
       ...form,
       vacancy_count: form.vacancy_count !== '' && form.vacancy_count !== null ? Number(form.vacancy_count) : null,
-      description: details.overview || form.description,
-      details,
+      details: null,
       category_id: form.category_id || null,
       exam_date: form.exam_date || null,
       application_start: form.application_start || null,
-      application_end: form.application_end || null,
+      application_end: notAnnouncedAppEnd ? null : (form.application_end || null),
+      official_link: pendingOfficialLink ? null : (form.official_link || null),
     }
 
     try {
@@ -177,17 +179,7 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
 
   const inputCls = INPUT_CLS
 
-  const tabs: { key: DetailsTab; label: string }[] = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'vacancy_details', label: 'Vacancies' },
-    { key: 'eligibility', label: 'Eligibility' },
-    { key: 'age_limit', label: 'Age Limit' },
-    { key: 'selection_process', label: 'Selection' },
-    { key: 'how_to_apply', label: 'How to Apply' },
-    { key: 'stipend_benefits', label: 'Stipend & Perks' },
-    { key: 'application_fee', label: 'App Fee' },
-    { key: 'important_dates_note', label: 'Notes' },
-  ]
+  const COLOR_PRESETS = ['#1A3C6E', '#FF7A00', '#059669', '#7C3AED', '#DC2626', '#DB2777', '#0284C7', '#D97706']
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -208,21 +200,35 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
         <Field label="Department">
           <input className={inputCls} value={form.department} onChange={e => set('department', e.target.value)} placeholder="Staff Selection Commission" />
         </Field>
-        <Field label="Category">
-          <select className={inputCls} value={form.category_id} onChange={e => set('category_id', e.target.value)}>
-            <option value="">— Select category —</option>
-            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </Field>
         <Field label="Status" required>
           <select className={inputCls} value={form.status} onChange={e => set('status', e.target.value)}>
             {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
           </select>
         </Field>
-        <Field label="Official Website (Apply Link)" required>
-          <input className={inputCls} value={form.official_link} onChange={e => set('official_link', e.target.value)} placeholder="https://ssc.gov.in" required />
-          <p className="text-xs text-[#5B6880] mt-1">Required: Official URL for &ldquo;Apply Now&rdquo;</p>
+
+        {/* Official Website Link with Not Released toggle */}
+        <Field label="Official Website (Apply Link)">
+          <input
+            className={inputCls}
+            value={form.official_link}
+            onChange={e => set('official_link', e.target.value)}
+            placeholder="https://ssc.gov.in"
+            disabled={pendingOfficialLink}
+          />
+          <label className="flex items-center gap-2 mt-1.5 cursor-pointer text-xs text-[#5B6880]">
+            <input
+              type="checkbox"
+              checked={pendingOfficialLink}
+              onChange={e => {
+                setPendingOfficialLink(e.target.checked)
+                if (e.target.checked) set('official_link', '')
+              }}
+              className="accent-[#1A3C6E]"
+            />
+            <span>Link pending / not announced yet</span>
+          </label>
         </Field>
+
         <Field label="Qualification">
           <input className={inputCls} value={form.qualification} onChange={e => set('qualification', e.target.value)} placeholder="Graduation" />
         </Field>
@@ -235,9 +241,30 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
         <Field label="Application Start">
           <input type="date" className={inputCls} value={form.application_start} onChange={e => set('application_start', e.target.value)} />
         </Field>
-        <Field label="Application End (Last Date)" required>
-          <input type="date" className={inputCls} value={form.application_end} onChange={e => set('application_end', e.target.value)} required />
+
+        {/* Application End with Not Announced toggle */}
+        <Field label="Application End (Last Date)">
+          <input
+            type="date"
+            className={inputCls}
+            value={form.application_end}
+            onChange={e => set('application_end', e.target.value)}
+            disabled={notAnnouncedAppEnd}
+          />
+          <label className="flex items-center gap-2 mt-1.5 cursor-pointer text-xs text-[#5B6880]">
+            <input
+              type="checkbox"
+              checked={notAnnouncedAppEnd}
+              onChange={e => {
+                setNotAnnouncedAppEnd(e.target.checked)
+                if (e.target.checked) set('application_end', '')
+              }}
+              className="accent-[#1A3C6E]"
+            />
+            <span>Not yet announced</span>
+          </label>
         </Field>
+
         <Field label="Exam Date">
           <input type="date" className={inputCls} value={form.exam_date} onChange={e => set('exam_date', e.target.value)} />
         </Field>
@@ -247,148 +274,69 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
         </Field>
       </div>
 
-      {/* Structured Content Tabbed Section Editor */}
-      <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50 space-y-3">
-        <label className="block text-xs font-bold text-[#0F1C30] uppercase tracking-wider">
-          Notification Details &amp; Sections (Structured Content)
-        </label>
-        
-        {/* Tab Bar */}
-        <div className="flex flex-wrap gap-1.5 border-b border-gray-200 pb-2">
-          {tabs.map(t => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setActiveDetailsTab(t.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeDetailsTab === t.key
-                  ? 'bg-[#1A3C6E] text-white shadow-sm'
-                  : 'bg-white text-[#5B6880] hover:text-[#0F1C30] border border-gray-200'
-              }`}
-            >
-              {t.label}
-              {details[t.key]?.trim() && <span className="ml-1 text-[10px] opacity-75">✓</span>}
-            </button>
-          ))}
-        </div>
+      {/* Description */}
+      <Field label="Description / Notification Details">
+        <p className="text-xs text-[#5B6880] mb-2">Write a full description of this exam/job notification. You can include eligibility, vacancies, selection process, fees, etc.</p>
+        <textarea
+          className={`${inputCls} min-h-48 resize-y`}
+          value={form.description}
+          onChange={e => set('description', e.target.value)}
+          placeholder="Official recruitment notification released by SSC for CGL 2026. Eligible candidates can apply online from ssc.gov.in...&#10;&#10;Eligibility: Bachelor's degree&#10;Vacancies: 17,727 posts&#10;Fee: General Rs.100 | SC/ST Free"
+        />
+      </Field>
 
-        {/* Tab Content Areas */}
-        <div className="bg-white p-3 rounded-lg border border-gray-200">
-          {activeDetailsTab === 'overview' && (
-            <div>
-              <p className="text-xs text-[#5B6880] mb-2 font-medium">Short introduction summary for the recruitment notice:</p>
-              <textarea
-                className={`${inputCls} min-h-28 resize-y`}
-                value={details.overview ?? ''}
-                onChange={e => setDetailField('overview', e.target.value)}
-                placeholder="Official recruitment notification released for SSC CGL 2026..."
-              />
-            </div>
-          )}
-
-          {activeDetailsTab === 'vacancy_details' && (
-            <div>
-              <p className="text-xs text-[#5B6880] mb-2 font-medium">Vacancy distribution by post or category (one item per line for bullet points):</p>
-              <textarea
-                className={`${inputCls} min-h-28 resize-y`}
-                value={details.vacancy_details ?? ''}
-                onChange={e => setDetailField('vacancy_details', e.target.value)}
-                placeholder="• Assistant Section Officer: 1,200 posts&#10;• Inspector of Income Tax: 800 posts&#10;• Executive Assistant: 450 posts"
-              />
-            </div>
-          )}
-
-          {activeDetailsTab === 'eligibility' && (
-            <div>
-              <p className="text-xs text-[#5B6880] mb-2 font-medium">Educational qualification &amp; eligibility conditions (one item per line):</p>
-              <textarea
-                className={`${inputCls} min-h-28 resize-y`}
-                value={details.eligibility ?? ''}
-                onChange={e => setDetailField('eligibility', e.target.value)}
-                placeholder="• Bachelor's Degree in any discipline from a recognized University&#10;• Computer Proficiency Certificate required for specific posts"
-              />
-            </div>
-          )}
-
-          {activeDetailsTab === 'age_limit' && (
-            <div>
-              <p className="text-xs text-[#5B6880] mb-2 font-medium">Age limits, relaxation rules, and cutoff date:</p>
-              <textarea
-                className={`${inputCls} min-h-28 resize-y`}
-                value={details.age_limit ?? ''}
-                onChange={e => setDetailField('age_limit', e.target.value)}
-                placeholder="18 to 32 years as of 01-08-2026. Age relaxation: OBC - 3 years, SC/ST - 5 years, PwD - 10 years."
-              />
-            </div>
-          )}
-
-          {activeDetailsTab === 'selection_process' && (
-            <div>
-              <p className="text-xs text-[#5B6880] mb-2 font-medium">Stages of selection process (one stage per line):</p>
-              <textarea
-                className={`${inputCls} min-h-28 resize-y`}
-                value={details.selection_process ?? ''}
-                onChange={e => setDetailField('selection_process', e.target.value)}
-                placeholder="• Tier 1: Computer Based Examination (Objective)&#10;• Tier 2: Subject-wise Computer Examination&#10;• Document Verification & Medical Exam"
-              />
-            </div>
-          )}
-
-          {activeDetailsTab === 'how_to_apply' && (
-            <div>
-              <p className="text-xs text-[#5B6880] mb-2 font-medium">Step-by-step instructions to submit application online:</p>
-              <textarea
-                className={`${inputCls} min-h-28 resize-y`}
-                value={details.how_to_apply ?? ''}
-                onChange={e => setDetailField('how_to_apply', e.target.value)}
-                placeholder="1. Visit the official portal ssc.gov.in&#10;2. Complete One Time Registration (OTR)&#10;3. Fill application form & upload photo/signature&#10;4. Pay application fee and submit"
-              />
-            </div>
-          )}
-
-          {activeDetailsTab === 'stipend_benefits' && (
-            <div>
-              <p className="text-xs text-[#5B6880] mb-2 font-medium">Salary grade, pay matrix level, allowance &amp; perks:</p>
-              <textarea
-                className={`${inputCls} min-h-28 resize-y`}
-                value={details.stipend_benefits ?? ''}
-                onChange={e => setDetailField('stipend_benefits', e.target.value)}
-                placeholder="Pay Level 7 (Rs. 44,900 to 1,42,400) + HRA, DA, Medical allowance as per Central Govt rules."
-              />
-            </div>
-          )}
-
-          {activeDetailsTab === 'application_fee' && (
-            <div>
-              <p className="text-xs text-[#5B6880] mb-2 font-medium">Category-wise application fee and payment modes:</p>
-              <textarea
-                className={`${inputCls} min-h-28 resize-y`}
-                value={details.application_fee ?? ''}
-                onChange={e => setDetailField('application_fee', e.target.value)}
-                placeholder="General / OBC / EWS: Rs. 100&#10;SC / ST / PwD / Female: Exempted (Nil)"
-              />
-            </div>
-          )}
-
-          {activeDetailsTab === 'important_dates_note' && (
-            <div>
-              <p className="text-xs text-[#5B6880] mb-2 font-medium">Additional schedule notes or helpline details:</p>
-              <textarea
-                className={`${inputCls} min-h-28 resize-y`}
-                value={details.important_dates_note ?? ''}
-                onChange={e => setDetailField('important_dates_note', e.target.value)}
-                placeholder="Correction window will be open for 3 days after application closing date."
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Job Type Tags */}
+      {/* Job Type Tags (Fix 6a: Create on the fly) */}
       <Field label="Job Type Tags">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-[#5B6880]">{selectedJobTags.length} tag(s) selected</span>
+          <button
+            type="button"
+            onClick={() => setNewTagModalOpen(!newTagModalOpen)}
+            className="text-xs font-bold text-[#FF7A00] hover:underline flex items-center gap-1"
+          >
+            + Create New Tag
+          </button>
+        </div>
+
+        {/* Inline New Tag Creator */}
+        {newTagModalOpen && (
+          <div className="bg-[#EEF2F8] p-3 rounded-lg border border-[#1A3C6E]/20 mb-3 space-y-2">
+            <p className="text-xs font-bold text-[#0F1C30]">Add New Job Tag</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newTagName}
+                onChange={e => setNewTagName(e.target.value)}
+                placeholder="e.g. Apprentice, Assistant"
+                className="flex-1 border border-gray-300 rounded px-2.5 py-1 text-xs text-[#0F1C30] outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleCreateTag}
+                disabled={creatingTag || !newTagName.trim()}
+                className="bg-[#1A3C6E] text-white font-bold text-xs px-3 py-1 rounded hover:bg-[#FF7A00] transition-colors disabled:opacity-50"
+              >
+                {creatingTag ? 'Creating…' : 'Save Tag'}
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5 pt-1">
+              <span className="text-[11px] text-[#5B6880] font-medium mr-1">Badge Color:</span>
+              {COLOR_PRESETS.map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setNewTagColor(c)}
+                  className={`w-5 h-5 rounded-full border border-black/10 transition-transform ${newTagColor === c ? 'scale-125 ring-2 ring-[#1A3C6E]' : ''}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2">
           {jobTags.length === 0 ? (
-            <p className="text-xs text-[#5B6880] col-span-full">No tags found. Run the SQL migration first.</p>
+            <p className="text-xs text-[#5B6880] col-span-full">No tags found. Click "+ Create New Tag" above to add your first tag.</p>
           ) : jobTags.map(tag => (
             <label key={tag.id} className="flex items-center gap-2 cursor-pointer text-sm">
               <input
@@ -406,7 +354,6 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
             </label>
           ))}
         </div>
-        <p className="text-xs text-[#5B6880] mt-1">{selectedJobTags.length} tag(s) selected</p>
       </Field>
 
       {/* All India toggle */}

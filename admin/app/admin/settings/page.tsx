@@ -2,11 +2,14 @@ export const dynamic = 'force-dynamic'
 import { createClient } from '@/lib/supabase/server'
 import { Shield, Database, Globe } from 'lucide-react'
 
+import SocialLinksForm from './SocialLinksForm'
+
 export const metadata = { title: 'Settings — JobAlert Admin' }
 
 export default async function SettingsPage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
+  const { data: siteSettings } = await supabase.from('site_settings').select('*').eq('id', 'default').single()
 
   return (
     <div className="p-8 max-w-3xl">
@@ -16,6 +19,8 @@ export default async function SettingsPage() {
       </div>
 
       <div className="space-y-5">
+        {/* Social Links Config (Fix 3) */}
+        <SocialLinksForm initialData={siteSettings} />
         {/* Account */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
           <h2 className="font-bold text-[#0F1C30] text-sm flex items-center gap-2 mb-5">

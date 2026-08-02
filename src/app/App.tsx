@@ -368,10 +368,38 @@ function StatusTag({ status }: { status: JobStatus }) {
   );
 }
 
-// ── Ticker ────────────────────────────────────────────────────────────────────
+interface TickerItem {
+  id: string;
+  type: string;
+  title: string;
+  text: string;
+  examSlug?: string | null;
+  pdfUrl?: string | null;
+}
 
-function Ticker({ items }: { items: string[] }) {
-  const displayItems = items.length > 0 ? items : ["Loading live updates…"];
+function formatTickerItem(n: any): TickerItem {
+  const icons: Record<string, string> = {
+    new_job: "🔔",
+    result: "✅",
+    admit_card: "📄",
+    answer_key: "📋",
+    syllabus: "📚",
+  };
+  const icon = icons[n.type] ?? "🔔";
+  const examSlug = n.exams?.slug || null;
+  return {
+    id: n.id || Math.random().toString(),
+    type: n.type,
+    title: n.title,
+    text: `${icon} ${n.title}`,
+    examSlug: examSlug,
+    pdfUrl: n.pdf_url || null,
+  };
+}
+
+function Ticker({ items }: { items: TickerItem[] }) {
+  if (!items || items.length === 0) return null;
+
   return (
     <div className="bg-[#1A3C6E] text-white py-2 overflow-hidden relative border-b border-white/10">
       <div className="flex items-center">
@@ -381,18 +409,47 @@ function Ticker({ items }: { items: string[] }) {
         </div>
         <div className="overflow-hidden flex-1 ml-2">
           <div
-            className="flex gap-12 whitespace-nowrap"
+            className="flex gap-12 whitespace-nowrap hover:[animation-play-state:paused]"
             style={{
-              animation: `marquee ${Math.max(30, displayItems.length * 5)}s linear infinite`,
+              animation: `marquee ${Math.max(30, items.length * 6)}s linear infinite`,
               willChange: "transform",
             }}
           >
-            {[...displayItems, ...displayItems].map((item, i) => (
-              <span key={i} className="text-xs sm:text-sm text-white/90 inline-flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
-                {item}
-                <span className="text-white/30">|</span>
-              </span>
-            ))}
+            {[...items, ...items].map((item, i) => {
+              const targetPath = item.examSlug
+                ? `/exam/${item.examSlug}`
+                : item.type === "result"
+                ? "/results"
+                : item.type === "admit_card"
+                ? "/admit-card"
+                : item.type === "answer_key"
+                ? "/answer-key"
+                : item.type === "syllabus"
+                ? "/syllabus"
+                : "/latest-jobs";
+
+              return item.pdfUrl ? (
+                <a
+                  key={`${item.id}-${i}`}
+                  href={item.pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs sm:text-sm text-white/90 hover:text-[#FF7A00] hover:underline inline-flex items-center gap-2 transition-all pointer-events-auto"
+                >
+                  <span>{item.text}</span>
+                  <span className="text-white/30 ml-2">|</span>
+                </a>
+              ) : (
+                <Link
+                  key={`${item.id}-${i}`}
+                  to={targetPath}
+                  className="text-xs sm:text-sm text-white/90 hover:text-[#FF7A00] hover:underline inline-flex items-center gap-2 transition-all pointer-events-auto"
+                >
+                  <span>{item.text}</span>
+                  <span className="text-white/30 ml-2">|</span>
+                </Link>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -498,6 +555,25 @@ function Header({
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const [siteSettings, setSiteSettings] = useState<{
+    whatsapp_url?: string;
+    telegram_url?: string;
+  }>({
+    whatsapp_url: "https://chat.whatsapp.com/jobalertin",
+    telegram_url: "https://t.me/jobalertin",
+  });
+
+  useEffect(() => {
+    supabase
+      .from("site_settings")
+      .select("*")
+      .eq("id", "default")
+      .single()
+      .then(({ data }) => {
+        if (data) setSiteSettings(data);
+      });
+  }, []);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -691,8 +767,34 @@ function Header({
             </div>
           </nav>
 
-          {/* Action Button & Mobile Toggle */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Action Buttons: WhatsApp, Telegram & Notify Me */}
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            {siteSettings?.whatsapp_url && (
+              <a
+                href={siteSettings.whatsapp_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:flex items-center justify-center bg-[#25D366] hover:bg-[#20bd5a] text-white p-2 rounded-lg transition-transform hover:scale-105 shadow-md"
+                title="Join WhatsApp Channel"
+                aria-label="Join WhatsApp Channel"
+              >
+                <WhatsAppIcon size={16} />
+              </a>
+            )}
+
+            {siteSettings?.telegram_url && (
+              <a
+                href={siteSettings.telegram_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:flex items-center justify-center bg-[#229ED9] hover:bg-[#1d8cb0] text-white p-2 rounded-lg transition-transform hover:scale-105 shadow-md"
+                title="Join Telegram Channel"
+                aria-label="Join Telegram Channel"
+              >
+                <TelegramIcon size={16} />
+              </a>
+            )}
+
             <button
               onClick={handleSubscribePush}
               className="flex items-center gap-1.5 bg-[#FF7A00] hover:bg-[#E86E00] text-white text-xs sm:text-sm font-semibold px-2.5 sm:px-3 py-2 rounded-lg transition-colors shadow-md whitespace-nowrap"
@@ -803,6 +905,32 @@ function Header({
             <Link to="/answer-key" onClick={() => setMenuOpen(false)} className="flex items-center text-white/80 hover:text-white py-2 border-b border-white/10 text-sm font-medium gap-2">
               <ChevronRight size={14} className="text-[#FF7A00]" /> Answer Key
             </Link>
+          </div>
+
+          {/* Mobile Community Join Buttons */}
+          <div className="pt-3 border-t border-white/10 flex flex-col gap-2 mt-3">
+            {siteSettings?.whatsapp_url && (
+              <a
+                href={siteSettings.whatsapp_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-sm transition-colors"
+              >
+                <WhatsAppIcon size={16} />
+                <span>Join WhatsApp Channel</span>
+              </a>
+            )}
+            {siteSettings?.telegram_url && (
+              <a
+                href={siteSettings.telegram_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 bg-[#229ED9] hover:bg-[#1d8cb0] text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-sm transition-colors"
+              >
+                <TelegramIcon size={16} />
+                <span>Join Telegram Channel</span>
+              </a>
+            )}
           </div>
         </div>
       )}
@@ -1470,6 +1598,10 @@ function CategoryPage({
 
   const filteredExams = filterExams(exams, searchQuery, selectedState, selectedCategory, selectedTag);
 
+  const activeJobTags = allJobTags.filter((tag) =>
+    exams.some((e) => e.exam_job_tags?.some((ejt) => ejt.job_tags?.slug === tag.slug || ejt.job_tag_id === tag.id))
+  );
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Category Header */}
@@ -1561,8 +1693,8 @@ function CategoryPage({
           </div>
         </div>
 
-        {/* Job Type Filter Chips */}
-        {allJobTags.length > 0 && (
+        {/* Job Type Filter Chips (Fix 6b: Only show tags with count > 0) */}
+        {activeJobTags.length > 0 && (
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-[#1A3C6E] mb-2">
               Filter by Job Role / Type:
@@ -1578,7 +1710,7 @@ function CategoryPage({
               >
                 All Job Types
               </button>
-              {allJobTags.map((tag) => {
+              {activeJobTags.map((tag) => {
                 const active = selectedTag === tag.slug;
                 return (
                   <button
@@ -1691,6 +1823,75 @@ function CategoryPage({
   );
 }
 
+// ── Text Cleaning & Accordion Component for Exam Details ─────────────────────
+
+function cleanText(text: string | null | undefined): string {
+  if (!text) return "";
+  let s = text
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\uFFFD\s*\./g, "")
+    .replace(/\uFFFD/g, "")
+    .replace(/•\s*\./g, "")
+    .replace(/•\s*•/g, "•")
+    .trim();
+
+  const rawLines = s.split("\n");
+  const cleanedLines: string[] = [];
+
+  for (let line of rawLines) {
+    let l = line.trim();
+    l = l.replace(/^•\s*\./, "").replace(/•\s*\.$/, "").replace(/•\s*\./g, "").trim();
+    if (l) cleanedLines.push(l);
+  }
+
+  return cleanedLines.join("\n");
+}
+
+function DetailSection({
+  title,
+  content,
+  icon: Icon,
+}: {
+  title: string;
+  content?: string | null;
+  icon?: any;
+}) {
+  if (!content || !content.trim()) return null;
+
+  const cleaned = cleanText(content);
+  if (!cleaned) return null;
+  const lines = cleaned.split("\n").filter((l) => l.trim().length > 0);
+
+  return (
+    <div className="border-b border-gray-100 last:border-0 pb-6 last:pb-0">
+      <h4 className="text-base sm:text-lg font-bold text-[#1A3C6E] mb-2.5 flex items-center gap-2">
+        {Icon && <Icon size={18} className="text-[#FF7A00]" />}
+        {title}
+      </h4>
+      <div className="text-sm text-[#0F1C30] leading-relaxed">
+        {lines.length > 1 || lines.some((l) => l.trim().startsWith("•") || l.trim().startsWith("-")) ? (
+          <ul className="space-y-2.5 pl-0.5">
+            {lines.map((line, idx) => {
+              const cleanLine = line.replace(/^[•\-\*]\s*/, "").replace(/\s*•\s*\.$/, "").trim();
+              if (!cleanLine) return null;
+              return (
+                <li key={idx} className="flex items-start gap-2.5">
+                  <span className="text-[#FF7A00] font-bold text-sm leading-none mt-1">•</span>
+                  <span className="flex-1 text-[#0F1C30] leading-relaxed">{cleanLine}</span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="whitespace-pre-line text-sm text-[#0F1C30] leading-relaxed">{cleaned}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Exam Detail Page (Fix 3: Contextual Toast Notification) ───────────────────
 
 function ExamDetailPage() {
@@ -1748,7 +1949,7 @@ function ExamDetailPage() {
         setLoading(false);
       }
     }
-    if (slug) loadExam();
+    if (slug) fetchExam();
   }, [slug]);
 
   if (loading) {
@@ -1777,6 +1978,26 @@ function ExamDetailPage() {
   }
 
   const jobStatus = calcJobStatus(exam);
+
+  // ── Info boxes active state ──
+  const hasVacancy = Boolean(exam.vacancy_count && Number(exam.vacancy_count) > 0);
+  const hasAppEnd = Boolean(exam.application_end && exam.application_end.trim());
+  const hasQualification = Boolean(exam.qualification && exam.qualification.trim());
+  const hasAgeLimit = Boolean(exam.age_limit && exam.age_limit.trim());
+  const activeInfoCount = [hasVacancy, hasAppEnd, hasQualification, hasAgeLimit].filter(Boolean).length;
+
+  // ── Dates & Links active state ──
+  const hasAppStart = Boolean(exam.application_start && exam.application_start.trim());
+  const hasExamDate = Boolean(exam.exam_date && exam.exam_date.trim());
+  const hasOfficialLink = Boolean(exam.official_link && exam.official_link.trim());
+  const activeDatesCount = [hasAppStart, hasAppEnd, hasExamDate].filter(Boolean).length;
+  const hasDatesOrLinksSection = activeDatesCount > 0 || hasOfficialLink;
+
+  const hasDescription = Boolean(exam.description && exam.description.trim().length > 0);
+  const hasNotificationSection = hasDescription;
+
+  // ── Safety check if literally no details exist ──
+  const isCompletelyEmptyPage = activeInfoCount === 0 && !hasDatesOrLinksSection && !hasNotificationSection;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -1833,166 +2054,188 @@ function ExamDetailPage() {
         )}
       </div>
 
-      {/* Dynamic Key Details Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-          <div className="w-10 h-10 rounded-lg bg-orange-50 text-[#FF7A00] flex items-center justify-center mx-auto mb-2">
-            <Briefcase size={20} />
-          </div>
-          <span className="text-xs text-[#5B6880] block font-medium">Total Posts</span>
-          <span className="text-sm md:text-base font-bold text-[#0F1C30]">
-            {exam.vacancy_count ? exam.vacancy_count.toLocaleString("en-IN") : "Not specified"}
-          </span>
+      {/* Dynamic Key Details Grid — renders ONLY if at least 1 box has data */}
+      {activeInfoCount > 0 && (
+        <div className={`grid grid-cols-1 ${
+          activeInfoCount === 2 ? 'sm:grid-cols-2' : activeInfoCount === 3 ? 'sm:grid-cols-3' : activeInfoCount >= 4 ? 'grid-cols-2 md:grid-cols-4' : 'sm:grid-cols-1'
+        } gap-4 mb-6`}>
+          {hasVacancy && (
+            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+              <div className="w-10 h-10 rounded-lg bg-orange-50 text-[#FF7A00] flex items-center justify-center mx-auto mb-2">
+                <Briefcase size={20} />
+              </div>
+              <span className="text-xs text-[#5B6880] block font-medium">Total Posts</span>
+              <span className="text-sm md:text-base font-bold text-[#0F1C30]">
+                {exam.vacancy_count!.toLocaleString("en-IN")}
+              </span>
+            </div>
+          )}
+
+          {hasAppEnd && (
+            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+              <div className="w-10 h-10 rounded-lg bg-blue-50 text-[#1A3C6E] flex items-center justify-center mx-auto mb-2">
+                <Clock size={20} />
+              </div>
+              <span className="text-xs text-[#5B6880] block font-medium">Last Date to Apply</span>
+              <span className={`text-sm font-bold ${jobStatus === "closing-soon" ? "text-[#E03E3E]" : "text-[#0F1C30]"}`}>
+                {fmtDate(exam.application_end)}
+              </span>
+            </div>
+          )}
+
+          {hasQualification && (
+            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+              <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center mx-auto mb-2">
+                <GraduationCap size={20} />
+              </div>
+              <span className="text-xs text-[#5B6880] block font-medium">Qualification</span>
+              <span className="text-sm font-bold text-[#0F1C30]">{exam.qualification}</span>
+            </div>
+          )}
+
+          {hasAgeLimit && (
+            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+              <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2">
+                <Tag size={20} />
+              </div>
+              <span className="text-xs text-[#5B6880] block font-medium">Age Limit</span>
+              <span className="text-sm font-bold text-[#0F1C30]">{exam.age_limit}</span>
+            </div>
+          )}
         </div>
+      )}
 
-        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-          <div className="w-10 h-10 rounded-lg bg-blue-50 text-[#1A3C6E] flex items-center justify-center mx-auto mb-2">
-            <Clock size={20} />
-          </div>
-          <span className="text-xs text-[#5B6880] block font-medium">Last Date to Apply</span>
-          <span className={`text-sm font-bold ${jobStatus === "closing-soon" ? "text-[#E03E3E]" : "text-[#0F1C30]"}`}>
-            {exam.application_end ? fmtDate(exam.application_end) : "Not specified"}
-          </span>
-        </div>
+      {/* Dynamic Dates & Official Website Section — renders ONLY if at least 1 date is filled */}
+      {activeDatesCount > 0 && (
+        <div className="bg-white rounded-2xl border border-[#1A3C6E]/10 shadow-sm p-6 md:p-8 mb-6">
+          <h3 className="text-lg font-bold text-[#0F1C30] mb-4 flex items-center gap-2">
+            <Calendar size={18} className="text-[#FF7A00]" /> Important Dates
+          </h3>
 
-        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-          <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center mx-auto mb-2">
-            <GraduationCap size={20} />
-          </div>
-          <span className="text-xs text-[#5B6880] block font-medium">Qualification</span>
-          <span className="text-sm font-bold text-[#0F1C30]">{exam.qualification || "Not specified"}</span>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-          <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2">
-            <Tag size={20} />
-          </div>
-          <span className="text-xs text-[#5B6880] block font-medium">Age Limit</span>
-          <span className="text-sm font-bold text-[#0F1C30]">{exam.age_limit || "Not specified"}</span>
-        </div>
-      </div>
-
-      {/* Dynamic Dates & Official Website Section */}
-      <div className="bg-white rounded-2xl border border-[#1A3C6E]/10 shadow-sm p-6 md:p-8 mb-6">
-        <h3 className="text-lg font-bold text-[#0F1C30] mb-4 flex items-center gap-2">
-          <Calendar size={18} className="text-[#FF7A00]" /> Important Dates &amp; Links
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="p-3.5 bg-gray-50 rounded-xl">
-            <span className="text-xs text-[#5B6880] block font-medium">Application Start</span>
-            <span className="text-sm font-bold text-[#0F1C30]">{exam.application_start ? fmtDate(exam.application_start) : "To be updated"}</span>
-          </div>
-          <div className="p-3.5 bg-gray-50 rounded-xl">
-            <span className="text-xs text-[#5B6880] block font-medium">Application End</span>
-            <span className="text-sm font-bold text-[#0F1C30]">{exam.application_end ? fmtDate(exam.application_end) : "Not specified"}</span>
-          </div>
-          <div className="p-3.5 bg-gray-50 rounded-xl">
-            <span className="text-xs text-[#5B6880] block font-medium">Exam Date</span>
-            <span className="text-sm font-bold text-[#0F1C30]">{exam.exam_date ? fmtDate(exam.exam_date) : "Not announced yet"}</span>
+          <div className={`grid grid-cols-1 ${
+            activeDatesCount === 2 ? 'md:grid-cols-2' : activeDatesCount === 3 ? 'md:grid-cols-3' : 'md:grid-cols-1'
+          } gap-4`}>
+            {hasAppStart && (
+              <div className="p-3.5 bg-gray-50 rounded-xl">
+                <span className="text-xs text-[#5B6880] block font-medium">Application Start</span>
+                <span className="text-sm font-bold text-[#0F1C30]">{fmtDate(exam.application_start)}</span>
+              </div>
+            )}
+            {hasAppEnd && (
+              <div className="p-3.5 bg-gray-50 rounded-xl">
+                <span className="text-xs text-[#5B6880] block font-medium">Application End</span>
+                <span className="text-sm font-bold text-[#0F1C30]">{fmtDate(exam.application_end)}</span>
+              </div>
+            )}
+            {hasExamDate && (
+              <div className="p-3.5 bg-gray-50 rounded-xl">
+                <span className="text-xs text-[#5B6880] block font-medium">Exam Date</span>
+                <span className="text-sm font-bold text-[#0F1C30]">{fmtDate(exam.exam_date)}</span>
+              </div>
+            )}
           </div>
         </div>
+      )}
 
-        {/* Apply Now Link */}
-        {exam.official_link ? (
+      {/* Description Card */}
+      {hasDescription && (
+        <div className="bg-white rounded-2xl border border-[#1A3C6E]/12 shadow-sm p-6 md:p-8 mb-8">
+          <div className="flex items-center gap-2.5 mb-5 border-b border-gray-100 pb-4">
+            <FileText size={20} className="text-[#FF7A00]" />
+            <h3 className="text-lg font-extrabold text-[#0F1C30]" style={{ fontFamily: "'Poppins', sans-serif" }}>
+              Notification Details
+            </h3>
+          </div>
+          <p className="text-[#374151] text-sm leading-relaxed whitespace-pre-line">
+            {exam.description}
+          </p>
+        </div>
+      )}
+
+      {/* Primary Apply Now Action Section at the VERY BOTTOM */}
+      {hasOfficialLink && (
+        <div className="mt-8 pt-2">
           <a
-            href={exam.official_link}
+            href={exam.official_link!}
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full flex items-center justify-center gap-2 bg-[#FF7A00] hover:bg-[#E86E00] text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md text-base"
+            className="w-full flex items-center justify-center gap-3 bg-[#FF7A00] hover:bg-[#E86E00] text-white font-bold py-4 px-8 rounded-2xl transition-all shadow-xl hover:shadow-2xl text-base sm:text-lg group"
           >
-            Apply Now on Official Website <ExternalLink size={18} />
+            <span>Apply Now on Official Website</span>
+            <ExternalLink size={20} className="group-hover:translate-x-1 transition-transform" />
           </a>
-        ) : (
-          <button disabled className="w-full py-3.5 bg-gray-100 text-gray-400 font-bold rounded-xl cursor-not-allowed text-center text-sm">
-            Link not available — check back soon
-          </button>
-        )}
-      </div>
+          <p className="text-center text-xs text-[#5B6880] mt-2.5">
+            You will be redirected to the official government recruitment portal.
+          </p>
+        </div>
+      )}
 
-      {/* Notification Details & Structured Accordions */}
-      <div className="mb-6">
-        <h3 className="text-xl font-bold text-[#0F1C30] mb-4 flex items-center gap-2">
-          <FileText size={20} className="text-[#FF7A00]" /> Notification Details &amp; Overview
-        </h3>
-
-        {exam.details && Object.values(exam.details).some((v) => v && typeof v === "string" && v.trim().length > 0) ? (
-          <>
-            <AccordionItem
-              title="Overview & Introduction"
-              content={exam.details.overview || exam.description}
-              defaultOpen={true}
-              icon={Info}
-            />
-            <AccordionItem
-              title="Eligibility Criteria"
-              content={exam.details.eligibility}
-              defaultOpen={true}
-              icon={GraduationCap}
-            />
-            <AccordionItem
-              title="Vacancy Breakdown & Posts"
-              content={exam.details.vacancy_details}
-              defaultOpen={false}
-              icon={Briefcase}
-            />
-            <AccordionItem
-              title="Age Limit & Relaxations"
-              content={exam.details.age_limit}
-              defaultOpen={false}
-              icon={Tag}
-            />
-            <AccordionItem
-              title="Selection Process"
-              content={exam.details.selection_process}
-              defaultOpen={false}
-              icon={CheckSquare}
-            />
-            <AccordionItem
-              title="How to Apply"
-              content={exam.details.how_to_apply}
-              defaultOpen={false}
-              icon={ClipboardList}
-            />
-            <AccordionItem
-              title="Stipend, Salary & Benefits"
-              content={exam.details.stipend_benefits}
-              defaultOpen={false}
-              icon={Landmark}
-            />
-            <AccordionItem
-              title="Application Fee"
-              content={exam.details.application_fee}
-              defaultOpen={false}
-              icon={AlertCircle}
-            />
-            <AccordionItem
-              title="Important Notes & Schedule"
-              content={exam.details.important_dates_note}
-              defaultOpen={false}
-              icon={Calendar}
-            />
-          </>
-        ) : (
-          /* Graceful Fallback for Legacy Plain Text Description */
-          <AccordionItem
-            title="Overview & Details"
-            content={
-              exam.description ||
-              `Official recruitment notification released for ${exam.title}${exam.department ? ` by ${exam.department}` : ""}. Candidates meeting the eligibility requirements can submit online applications before the closing date.`
-            }
-            defaultOpen={true}
-            icon={Info}
-          />
-        )}
-      </div>
+      {/* Extreme Fallback for Completely Empty Exam Notice */}
+      {isCompletelyEmptyPage && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-[#5B6880] mb-6">
+          <Info size={32} className="mx-auto mb-2 text-[#1A3C6E]/40" />
+          <p className="font-semibold text-base text-[#0F1C30]">No detailed information posted yet.</p>
+          <p className="text-xs text-[#5B6880] mt-1">Key dates, vacancy counts, and official notification link will be updated here as soon as announced.</p>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Footer Component ──────────────────────────────────────────────────────────
+const WhatsAppIcon = ({ size = 14, className }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414-.074-.124-.272-.198-.57-.347z"/>
+    <path d="M12 2a10 10 0 0 0-8.66 15L2 22l5.13-1.34A10 10 0 1 0 12 2zm0 18a7.96 7.96 0 0 1-4.07-1.12l-.29-.17-3.03.79.81-2.95-.19-.3A7.96 7.96 0 1 1 12 20z"/>
+  </svg>
+);
+
+const FacebookIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+  </svg>
+);
+
+const TelegramIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="22" y1="2" x2="11" y2="13" />
+    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+  </svg>
+);
 
 function Footer() {
+  const [socials, setSocials] = useState<{
+    twitter_url?: string;
+    youtube_url?: string;
+    instagram_url?: string;
+    facebook_url?: string;
+    telegram_url?: string;
+  }>({
+    twitter_url: "https://x.com/jobalertin",
+    youtube_url: "https://youtube.com/@jobalertin",
+    instagram_url: "https://instagram.com/jobalertin",
+    facebook_url: "https://facebook.com/jobalertin",
+    telegram_url: "https://t.me/jobalertin",
+  });
+
+  useEffect(() => {
+    supabase
+      .from("site_settings")
+      .select("*")
+      .eq("id", "default")
+      .single()
+      .then(({ data }) => {
+        if (data) setSocials(data);
+      });
+  }, []);
+
+  const socialLinks = [
+    { icon: Twitter, url: socials.twitter_url, label: "Twitter / X" },
+    { icon: Youtube, url: socials.youtube_url, label: "YouTube" },
+    { icon: Instagram, url: socials.instagram_url, label: "Instagram" },
+    { icon: FacebookIcon, url: socials.facebook_url, label: "Facebook" },
+    { icon: TelegramIcon, url: socials.telegram_url, label: "Telegram" },
+  ].filter((s) => Boolean(s.url && s.url.trim()));
+
   return (
     <footer className="bg-[#0F1C30] text-white mt-12">
       {/* Main Footer */}
@@ -2012,9 +2255,16 @@ function Footer() {
           <p className="text-white/50 text-sm leading-relaxed mb-4">
             Real-time government job &amp; exam notification platform for Indian job seekers.
           </p>
-          <div className="flex gap-3">
-            {[Twitter, Youtube, Instagram].map((Icon, i) => (
-              <a key={i} href="#" className="w-8 h-8 rounded-lg bg-white/10 hover:bg-[#FF7A00] flex items-center justify-center transition-colors">
+          <div className="flex flex-wrap gap-2.5">
+            {socialLinks.map(({ icon: Icon, url, label }, i) => (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={label}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-[#FF7A00] flex items-center justify-center transition-colors text-white"
+              >
                 <Icon size={14} />
               </a>
             ))}
@@ -2142,7 +2392,7 @@ function AppContent() {
   const [categories, setCategories] = useState<DbCategory[]>([]);
   const [allJobTags, setAllJobTags] = useState<JobTag[]>([]);
   const [dbStates, setDbStates] = useState<DbState[]>([]);
-  const [tickerItems, setTickerItems] = useState<string[]>([]);
+  const [tickerItems, setTickerItems] = useState<TickerItem[]>([]);
   const [catCounts, setCatCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -2212,7 +2462,10 @@ function AppContent() {
           statesData = statesRes.data ?? [];
         }
 
-        // Fetch count metrics & notifications
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+        // Fetch count metrics & notifications (Filter notifications strictly for today & join exams slug)
         const [
           notifsRes,
           activeCountRes,
@@ -2222,7 +2475,12 @@ function AppContent() {
           syllabusCountRes,
           examCalRes,
         ] = await Promise.all([
-          supabase.from("notifications").select("type,title").order("published_at", { ascending: false }).limit(20),
+          supabase
+            .from("notifications")
+            .select("id,type,title,published_at,pdf_url,exam_id,exams(slug,title)")
+            .gte("published_at", startOfToday)
+            .order("published_at", { ascending: false })
+            .limit(20),
           supabase.from("exams").select("*", { count: "exact", head: true }).in("status", ["active", "upcoming"]),
           supabase.from("notifications").select("*", { count: "exact", head: true }).eq("type", "result"),
           supabase.from("notifications").select("*", { count: "exact", head: true }).eq("type", "admit_card"),
@@ -2242,7 +2500,7 @@ function AppContent() {
         setCategories(catsData);
         setAllJobTags(jobTagsData);
         setDbStates(statesData);
-        setTickerItems((notifsRes.data ?? []).map(fmtTicker));
+        setTickerItems((notifsRes.data ?? []).map(formatTickerItem));
 
         setCatCounts({
           "new-jobs": activeCountRes.count ?? 0,
@@ -2265,12 +2523,15 @@ function AppContent() {
     loadAll();
 
     const interval = setInterval(async () => {
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const { data } = await supabase
         .from("notifications")
-        .select("type,title")
+        .select("id,type,title,published_at,pdf_url,exam_id,exams(slug,title)")
+        .gte("published_at", startOfToday)
         .order("published_at", { ascending: false })
         .limit(20);
-      if (data) setTickerItems(data.map(fmtTicker));
+      if (data) setTickerItems(data.map(formatTickerItem));
     }, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
