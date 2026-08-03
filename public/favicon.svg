@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Dark navy rounded square background -->
+  <rect width="64" height="64" rx="14" fill="#1A3C6E"/>
+  <!-- Bell body -->
+  <path d="M32 12c-1.1 0-2 .9-2 2v1.2C24.1 16.4 20 21.2 20 27v8l-3 4v2h30v-2l-3-4v-8c0-5.8-4.1-10.6-10-11.8V14c0-1.1-.9-2-2-2z" fill="#FF7A00"/>
+  <!-- Bell clapper / notification dot -->
+  <circle cx="32" cy="49" r="3" fill="#FF7A00"/>
+  <!-- Inner highlight -->
+  <ellipse cx="28" cy="24" rx="3" ry="2" fill="white" opacity="0.25"/>
+</svg>

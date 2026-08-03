@@ -11,6 +11,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'JobAlert Admin',
   description: 'Admin dashboard for JobAlert — Govt Jobs & Exams India',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/logo.svg',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
