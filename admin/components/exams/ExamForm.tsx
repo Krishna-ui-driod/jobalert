@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Exam, Category, State, ExamStatus, JobTag } from '@/lib/types'
 import Button from '@/components/ui/Button'
+import { Plus, Trash2, Link } from 'lucide-react'
 
 interface ExamFormProps {
   exam: Exam | null
@@ -41,6 +42,13 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
   const [error, setError] = useState<string | null>(null)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
 
+  // Links
+  const [examLinks, setExamLinks] = useState<{ id?: string; label: string; url: string }[]>([])
+  const addLink = () => setExamLinks(prev => [...prev, { label: '', url: '' }])
+  const removeLink = (i: number) => setExamLinks(prev => prev.filter((_, idx) => idx !== i))
+  const updateLink = (i: number, field: 'label' | 'url', val: string) =>
+    setExamLinks(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: val } : l))
+
   const [form, setForm] = useState({
     title: exam?.title ?? '',
     slug: exam?.slug ?? '',
@@ -67,6 +75,8 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
         .then(({ data }) => setSelectedStates(data?.map(r => r.state_id) ?? []))
       supabase.from('exam_job_tags').select('job_tag_id').eq('exam_id', exam.id)
         .then(({ data }) => setSelectedJobTags(data?.map(r => r.job_tag_id) ?? []))
+      supabase.from('exam_links').select('id, label, url, display_order').eq('exam_id', exam.id).order('display_order')
+        .then(({ data }) => setExamLinks(data?.map(r => ({ id: r.id, label: r.label, url: r.url })) ?? []))
     }
   }, [exam?.id])
 
@@ -158,6 +168,17 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
         if (selectedJobTags.length > 0) {
           await supabase.from('exam_job_tags').insert(
             selectedJobTags.map(job_tag_id => ({ exam_id: examId!, job_tag_id }))
+          )
+        }
+      }
+
+      // Sync exam_links
+      if (examId) {
+        await supabase.from('exam_links').delete().eq('exam_id', examId)
+        const validLinks = examLinks.filter(l => l.label.trim() && l.url.trim())
+        if (validLinks.length > 0) {
+          await supabase.from('exam_links').insert(
+            validLinks.map((l, i) => ({ exam_id: examId!, label: l.label.trim(), url: l.url.trim(), display_order: i }))
           )
         }
       }
@@ -281,9 +302,57 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
           className={`${inputCls} min-h-48 resize-y`}
           value={form.description}
           onChange={e => set('description', e.target.value)}
-          placeholder="Official recruitment notification released by SSC for CGL 2026. Eligible candidates can apply online from ssc.gov.in...&#10;&#10;Eligibility: Bachelor's degree&#10;Vacancies: 17,727 posts&#10;Fee: General Rs.100 | SC/ST Free"
+          placeholder={`Official recruitment notification released by SSC for CGL 2026. Eligible candidates can apply online from ssc.gov.in...\n\nEligibility: Bachelor's degree\nVacancies: 17,727 posts\nFee: General Rs.100 | SC/ST Free`}
         />
       </Field>
+
+      {/* Additional Links */}
+      <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-bold text-[#0F1C30] uppercase tracking-wider flex items-center gap-2">
+            <Link size={13} className="text-[#1A3C6E]" /> Additional Links
+          </label>
+          <button
+            type="button"
+            onClick={addLink}
+            className="flex items-center gap-1 text-xs font-bold text-[#FF7A00] hover:text-[#E86E00] transition-colors"
+          >
+            <Plus size={13} /> Add Link
+          </button>
+        </div>
+        <p className="text-xs text-[#5B6880]">Add supplementary links (Official PDF, Syllabus, Apply Online, etc.). These appear on the public exam page below the Apply button.</p>
+        {examLinks.length === 0 ? (
+          <p className="text-xs text-[#5B6880] italic">No links added yet. Click "+ Add Link" to add one.</p>
+        ) : (
+          <div className="space-y-2">
+            {examLinks.map((link, i) => (
+              <div key={i} className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={link.label}
+                  onChange={e => updateLink(i, 'label', e.target.value)}
+                  placeholder="Label (e.g. Official PDF, Syllabus)"
+                  className="flex-[2] border border-gray-200 rounded-lg px-3 py-2 text-xs text-[#0F1C30] outline-none focus:border-[#1A3C6E] focus:ring-1 focus:ring-[#1A3C6E]/20 transition-all"
+                />
+                <input
+                  type="url"
+                  value={link.url}
+                  onChange={e => updateLink(i, 'url', e.target.value)}
+                  placeholder="https://..."
+                  className="flex-[3] border border-gray-200 rounded-lg px-3 py-2 text-xs text-[#0F1C30] outline-none focus:border-[#1A3C6E] focus:ring-1 focus:ring-[#1A3C6E]/20 transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeLink(i)}
+                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Job Type Tags (Fix 6a: Create on the fly) */}
       <Field label="Job Type Tags">

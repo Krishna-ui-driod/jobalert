@@ -1,10 +1,10 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Category, State, ExamStatus, JobTag, ExamDetails } from '@/lib/types'
+import { Category, State, ExamStatus, JobTag } from '@/lib/types'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import { Search, Send, FileText, Bell, X } from 'lucide-react'
+import { Search, Send, FileText, Bell, X, Plus, Trash2, Link } from 'lucide-react'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -97,23 +97,13 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
     vacancy_count: '',
   })
 
-  const [details, setDetails] = useState<ExamDetails>({
-    overview: '',
-    vacancy_details: '',
-    eligibility: '',
-    age_limit: '',
-    stipend_benefits: '',
-    selection_process: '',
-    how_to_apply: '',
-    application_fee: '',
-    important_dates_note: '',
-  })
-  type DetailsTab = 'overview' | 'vacancy_details' | 'eligibility' | 'age_limit' | 'stipend_benefits' | 'selection_process' | 'how_to_apply' | 'application_fee' | 'important_dates_note'
-  const [activeDetailsTab, setActiveDetailsTab] = useState<DetailsTab>('overview')
+  // Links state: array of {label, url} rows
+  const [examLinks, setExamLinks] = useState<{ label: string; url: string }[]>([])
 
-  const setDetailField = (key: keyof ExamDetails, value: string) => {
-    setDetails(prev => ({ ...prev, [key]: value }))
-  }
+  const addLink = () => setExamLinks(prev => [...prev, { label: '', url: '' }])
+  const removeLink = (i: number) => setExamLinks(prev => prev.filter((_, idx) => idx !== i))
+  const updateLink = (i: number, field: 'label' | 'url', val: string) =>
+    setExamLinks(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: val } : l))
 
   const [newTagModalOpen, setNewTagModalOpen] = useState(false)
   const [newTagName, setNewTagName] = useState('')
@@ -180,11 +170,7 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
       exam_date: '', status: 'upcoming', official_link: '', is_all_india: false,
       vacancy_count: '',
     })
-    setDetails({
-      overview: '', vacancy_details: '', eligibility: '', age_limit: '',
-      stipend_benefits: '', selection_process: '', how_to_apply: '',
-      application_fee: '', important_dates_note: '',
-    })
+    setExamLinks([])
     setSelectedExam(null)
     setExamSearch('')
     setNotifTitle('')
@@ -226,8 +212,7 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
         const payload = {
           ...examForm,
           vacancy_count: examForm.vacancy_count !== '' && examForm.vacancy_count !== null ? Number(examForm.vacancy_count) : null,
-          description: details.overview || examForm.description,
-          details,
+          details: null,
           category_id: examForm.category_id || null,
           exam_date: examForm.exam_date || null,
           application_start: examForm.application_start || null,
@@ -251,6 +236,14 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
         if (selectedJobTags.length > 0) {
           await supabase.from('exam_job_tags').insert(
             selectedJobTags.map(job_tag_id => ({ exam_id: examId, job_tag_id }))
+          )
+        }
+
+        // Sync exam_links
+        const validLinks = examLinks.filter(l => l.label.trim() && l.url.trim())
+        if (validLinks.length > 0) {
+          await supabase.from('exam_links').insert(
+            validLinks.map((l, i) => ({ exam_id: examId, label: l.label.trim(), url: l.url.trim(), display_order: i }))
           )
         }
 
@@ -439,151 +432,64 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
                   </Field>
                 </div>
 
-                {/* Structured Content Tabbed Section Editor */}
+                {/* Description / Exam Details */}
+                <Field label="Exam Details / Description">
+                  <p className="text-xs text-[#5B6880] mb-2">Write a full description of this exam/job notification — eligibility, vacancies, selection process, fees, how to apply, etc.</p>
+                  <textarea
+                    className={`${INPUT_CLS} min-h-48 resize-y`}
+                    value={examForm.description}
+                    onChange={e => setExamField('description', e.target.value)}
+                    placeholder={`Official recruitment notification released. Eligible candidates can apply online.\n\nEligibility: Bachelor's degree\nVacancies: e.g. 17,727 posts\nFee: General Rs.100 | SC/ST Free\nHow to Apply: Visit the official website and complete registration`}
+                  />
+                </Field>
+
+                {/* Additional Links Section */}
                 <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50 space-y-3">
-                  <label className="block text-xs font-bold text-[#0F1C30] uppercase tracking-wider">
-                    Notification Details &amp; Sections (Structured Content)
-                  </label>
-                  
-                  {/* Tab Bar */}
-                  <div className="flex flex-wrap gap-1.5 border-b border-gray-200 pb-2">
-                    {[
-                      { key: 'overview', label: 'Overview' },
-                      { key: 'vacancy_details', label: 'Vacancies' },
-                      { key: 'eligibility', label: 'Eligibility' },
-                      { key: 'age_limit', label: 'Age Limit' },
-                      { key: 'selection_process', label: 'Selection' },
-                      { key: 'how_to_apply', label: 'How to Apply' },
-                      { key: 'stipend_benefits', label: 'Stipend & Perks' },
-                      { key: 'application_fee', label: 'App Fee' },
-                      { key: 'important_dates_note', label: 'Notes' },
-                    ].map(t => (
-                      <button
-                        key={t.key}
-                        type="button"
-                        onClick={() => setActiveDetailsTab(t.key as any)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                          activeDetailsTab === t.key
-                            ? 'bg-[#1A3C6E] text-white shadow-sm'
-                            : 'bg-white text-[#5B6880] hover:text-[#0F1C30] border border-gray-200'
-                        }`}
-                      >
-                        {t.label}
-                        {details[t.key as keyof ExamDetails]?.trim() && <span className="ml-1 text-[10px] opacity-75">✓</span>}
-                      </button>
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-[#0F1C30] uppercase tracking-wider flex items-center gap-2">
+                      <Link size={13} className="text-[#1A3C6E]" /> Additional Links
+                    </label>
+                    <button
+                      type="button"
+                      onClick={addLink}
+                      className="flex items-center gap-1 text-xs font-bold text-[#FF7A00] hover:text-[#E86E00] transition-colors"
+                    >
+                      <Plus size={13} /> Add Link
+                    </button>
                   </div>
+                  <p className="text-xs text-[#5B6880]">Add supplementary links (e.g. Official PDF, Syllabus, Apply Online, Check Result). These appear on the public exam page.</p>
 
-                  {/* Tab Content Areas */}
-                  <div className="bg-white p-3 rounded-lg border border-gray-200">
-                    {activeDetailsTab === 'overview' && (
-                      <div>
-                        <p className="text-xs text-[#5B6880] mb-2 font-medium">Short introduction summary for the recruitment notice:</p>
-                        <textarea
-                          className={`${INPUT_CLS} min-h-28 resize-y`}
-                          value={details.overview ?? ''}
-                          onChange={e => setDetailField('overview', e.target.value)}
-                          placeholder="Official recruitment notification released for SSC CGL 2026..."
-                        />
-                      </div>
-                    )}
-
-                    {activeDetailsTab === 'vacancy_details' && (
-                      <div>
-                        <p className="text-xs text-[#5B6880] mb-2 font-medium">Vacancy distribution by post or category (one item per line for bullet points):</p>
-                        <textarea
-                          className={`${INPUT_CLS} min-h-28 resize-y`}
-                          value={details.vacancy_details ?? ''}
-                          onChange={e => setDetailField('vacancy_details', e.target.value)}
-                          placeholder="• Assistant Section Officer: 1,200 posts&#10;• Inspector of Income Tax: 800 posts&#10;• Executive Assistant: 450 posts"
-                        />
-                      </div>
-                    )}
-
-                    {activeDetailsTab === 'eligibility' && (
-                      <div>
-                        <p className="text-xs text-[#5B6880] mb-2 font-medium">Educational qualification &amp; eligibility conditions (one item per line):</p>
-                        <textarea
-                          className={`${INPUT_CLS} min-h-28 resize-y`}
-                          value={details.eligibility ?? ''}
-                          onChange={e => setDetailField('eligibility', e.target.value)}
-                          placeholder="• Bachelor's Degree in any discipline from a recognized University&#10;• Computer Proficiency Certificate required for specific posts"
-                        />
-                      </div>
-                    )}
-
-                    {activeDetailsTab === 'age_limit' && (
-                      <div>
-                        <p className="text-xs text-[#5B6880] mb-2 font-medium">Age limits, relaxation rules, and cutoff date:</p>
-                        <textarea
-                          className={`${INPUT_CLS} min-h-28 resize-y`}
-                          value={details.age_limit ?? ''}
-                          onChange={e => setDetailField('age_limit', e.target.value)}
-                          placeholder="18 to 32 years as of 01-08-2026. Age relaxation: OBC - 3 years, SC/ST - 5 years, PwD - 10 years."
-                        />
-                      </div>
-                    )}
-
-                    {activeDetailsTab === 'selection_process' && (
-                      <div>
-                        <p className="text-xs text-[#5B6880] mb-2 font-medium">Stages of selection process (one stage per line):</p>
-                        <textarea
-                          className={`${INPUT_CLS} min-h-28 resize-y`}
-                          value={details.selection_process ?? ''}
-                          onChange={e => setDetailField('selection_process', e.target.value)}
-                          placeholder="• Tier 1: Computer Based Examination (Objective)&#10;• Tier 2: Subject-wise Computer Examination&#10;• Document Verification & Medical Exam"
-                        />
-                      </div>
-                    )}
-
-                    {activeDetailsTab === 'how_to_apply' && (
-                      <div>
-                        <p className="text-xs text-[#5B6880] mb-2 font-medium">Step-by-step instructions to submit application online:</p>
-                        <textarea
-                          className={`${INPUT_CLS} min-h-28 resize-y`}
-                          value={details.how_to_apply ?? ''}
-                          onChange={e => setDetailField('how_to_apply', e.target.value)}
-                          placeholder="1. Visit the official portal ssc.gov.in&#10;2. Complete One Time Registration (OTR)&#10;3. Fill application form & upload photo/signature&#10;4. Pay application fee and submit"
-                        />
-                      </div>
-                    )}
-
-                    {activeDetailsTab === 'stipend_benefits' && (
-                      <div>
-                        <p className="text-xs text-[#5B6880] mb-2 font-medium">Salary grade, pay matrix level, allowance &amp; perks:</p>
-                        <textarea
-                          className={`${INPUT_CLS} min-h-28 resize-y`}
-                          value={details.stipend_benefits ?? ''}
-                          onChange={e => setDetailField('stipend_benefits', e.target.value)}
-                          placeholder="Pay Level 7 (Rs. 44,900 to 1,42,400) + HRA, DA, Medical allowance as per Central Govt rules."
-                        />
-                      </div>
-                    )}
-
-                    {activeDetailsTab === 'application_fee' && (
-                      <div>
-                        <p className="text-xs text-[#5B6880] mb-2 font-medium">Category-wise application fee and payment modes:</p>
-                        <textarea
-                          className={`${INPUT_CLS} min-h-28 resize-y`}
-                          value={details.application_fee ?? ''}
-                          onChange={e => setDetailField('application_fee', e.target.value)}
-                          placeholder="General / OBC / EWS: Rs. 100&#10;SC / ST / PwD / Female: Exempted (Nil)"
-                        />
-                      </div>
-                    )}
-
-                    {activeDetailsTab === 'important_dates_note' && (
-                      <div>
-                        <p className="text-xs text-[#5B6880] mb-2 font-medium">Additional schedule notes or helpline details:</p>
-                        <textarea
-                          className={`${INPUT_CLS} min-h-28 resize-y`}
-                          value={details.important_dates_note ?? ''}
-                          onChange={e => setDetailField('important_dates_note', e.target.value)}
-                          placeholder="Correction window will be open for 3 days after application closing date."
-                        />
-                      </div>
-                    )}
-                  </div>
+                  {examLinks.length === 0 ? (
+                    <p className="text-xs text-[#5B6880] italic">No links added yet. Click "+ Add Link" to add one.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {examLinks.map((link, i) => (
+                        <div key={i} className="flex gap-2 items-center">
+                          <input
+                            type="text"
+                            value={link.label}
+                            onChange={e => updateLink(i, 'label', e.target.value)}
+                            placeholder="Label (e.g. Official PDF)"
+                            className="flex-[2] border border-gray-200 rounded-lg px-3 py-2 text-xs text-[#0F1C30] outline-none focus:border-[#1A3C6E] focus:ring-1 focus:ring-[#1A3C6E]/20 transition-all"
+                          />
+                          <input
+                            type="url"
+                            value={link.url}
+                            onChange={e => updateLink(i, 'url', e.target.value)}
+                            placeholder="https://..."
+                            className="flex-[3] border border-gray-200 rounded-lg px-3 py-2 text-xs text-[#0F1C30] outline-none focus:border-[#1A3C6E] focus:ring-1 focus:ring-[#1A3C6E]/20 transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeLink(i)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Job Type Tags (Fix 6a: Create on the fly) */}
