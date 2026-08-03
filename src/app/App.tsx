@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import {
   BrowserRouter,
   Routes,
@@ -1900,6 +1901,7 @@ function ExamDetailPage() {
   const [exam, setExam] = useState<ExamRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [examLinks, setExamLinks] = useState<{ id: string; label: string; url: string; display_order: number }[]>([]);
   const toastShownRef = useRef(false);
 
   useEffect(() => {
@@ -1916,6 +1918,14 @@ function ExamDetailPage() {
 
         if (err) throw err;
         setExam(data as any);
+
+        // Fetch exam_links
+        const { data: linksData } = await supabase
+          .from('exam_links')
+          .select('id, label, url, display_order')
+          .eq('exam_id', data.id)
+          .order('display_order');
+        setExamLinks(linksData ?? []);
 
         if (data && !toastShownRef.current) {
           toastShownRef.current = true;
@@ -2146,9 +2156,43 @@ function ExamDetailPage() {
               Notification Details
             </h3>
           </div>
-          <p className="text-[#374151] text-sm leading-relaxed whitespace-pre-line">
-            {exam.description}
-          </p>
+          <div className="exam-description text-[#374151] text-sm leading-relaxed">
+            <ReactMarkdown
+              components={{
+                h1: ({ children }) => <h1 className="text-xl font-extrabold text-[#1A3C6E] mt-6 mb-3 first:mt-0" style={{ fontFamily: "'Poppins', sans-serif" }}>{children}</h1>,
+                h2: ({ children }) => <h2 className="text-lg font-extrabold text-[#1A3C6E] mt-5 mb-2 first:mt-0" style={{ fontFamily: "'Poppins', sans-serif" }}>{children}</h2>,
+                h3: ({ children }) => <h3 className="text-base font-bold text-[#1A3C6E] mt-4 mb-2 first:mt-0" style={{ fontFamily: "'Poppins', sans-serif" }}>{children}</h3>,
+                h4: ({ children }) => <h4 className="text-sm font-bold text-[#0F1C30] mt-3 mb-1">{children}</h4>,
+                p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
+                strong: ({ children }) => <strong className="font-bold text-[#0F1C30]">{children}</strong>,
+                em: ({ children }) => <em className="italic text-[#374151]">{children}</em>,
+                ul: ({ children }) => <ul className="mb-3 space-y-1 pl-1">{children}</ul>,
+                ol: ({ children }) => <ol className="mb-3 space-y-1 pl-1 list-decimal list-inside">{children}</ol>,
+                li: ({ children }) => (
+                  <li className="flex items-start gap-2">
+                    <span className="text-[#FF7A00] font-bold text-sm leading-none mt-1 flex-shrink-0">•</span>
+                    <span className="flex-1">{children}</span>
+                  </li>
+                ),
+                hr: () => <hr className="my-4 border-gray-100" />,
+                blockquote: ({ children }) => (
+                  <blockquote className="border-l-4 border-[#FF7A00] pl-4 py-1 my-3 bg-[#FF7A00]/5 rounded-r-lg text-[#374151] italic">
+                    {children}
+                  </blockquote>
+                ),
+                a: ({ href, children }) => (
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-[#FF7A00] underline hover:text-[#E86E00] font-medium transition-colors">
+                    {children}
+                  </a>
+                ),
+                code: ({ children }) => (
+                  <code className="bg-gray-100 text-[#0F1C30] px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>
+                ),
+              }}
+            >
+              {exam.description ?? ''}
+            </ReactMarkdown>
+          </div>
         </div>
       )}
 
@@ -2167,6 +2211,27 @@ function ExamDetailPage() {
           <p className="text-center text-xs text-[#5B6880] mt-2.5">
             You will be redirected to the official government recruitment portal.
           </p>
+        </div>
+      )}
+
+      {/* Additional Links (exam_links table) */}
+      {examLinks.length > 0 && (
+        <div className="mt-6">
+          <p className="text-xs font-bold text-[#0F1C30] uppercase tracking-wider mb-3">Additional Resources</p>
+          <div className="flex flex-wrap gap-2">
+            {examLinks.map(link => (
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border-2 border-[#1A3C6E]/20 bg-[#EEF2F8] hover:bg-[#1A3C6E] hover:border-[#1A3C6E] text-[#1A3C6E] hover:text-white text-xs font-bold transition-all group"
+              >
+                <ExternalLink size={12} className="flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                {link.label}
+              </a>
+            ))}
+          </div>
         </div>
       )}
 
