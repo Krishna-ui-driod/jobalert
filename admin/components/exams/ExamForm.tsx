@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Exam, Category, State, ExamStatus, JobTag } from '@/lib/types'
 import Button from '@/components/ui/Button'
-import { Plus, Trash2, Link } from 'lucide-react'
+import { Plus, Trash2, Link, AlertTriangle } from 'lucide-react'
+import { detectMalformedTable } from '@/lib/utils'
 
 interface ExamFormProps {
   exam: Exam | null
@@ -132,6 +133,7 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
 
     const payload = {
       ...form,
+      description: (form.description ?? '').replace(/\\n/g, '\n').replace(/\r\n/g, '\n'),
       vacancy_count: form.vacancy_count !== '' && form.vacancy_count !== null ? Number(form.vacancy_count) : null,
       details: null,
       category_id: form.category_id || null,
@@ -304,6 +306,15 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
           onChange={e => set('description', e.target.value)}
           placeholder={`Official recruitment notification released by SSC for CGL 2026. Eligible candidates can apply online from ssc.gov.in...\n\nEligibility: Bachelor's degree\nVacancies: 17,727 posts\nFee: General Rs.100 | SC/ST Free`}
         />
+        {detectMalformedTable(form.description) && (
+          <div className="mt-2.5 bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3 rounded-lg flex items-start gap-2.5 shadow-sm animate-in fade-in duration-200">
+            <AlertTriangle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <span className="font-bold text-amber-950">Table Formatting Warning: </span>
+              This looks like a malformed table — check that every row has the same number of | columns and a separator row (|---|---|) is right after the header.
+            </div>
+          </div>
+        )}
       </Field>
 
       {/* Additional Links */}

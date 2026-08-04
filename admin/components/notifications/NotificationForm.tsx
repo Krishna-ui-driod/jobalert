@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Exam, NotificationType } from '@/lib/types'
+import { Exam, Notification, NotificationType } from '@/lib/types'
 import Button from '@/components/ui/Button'
 import { Send, Search } from 'lucide-react'
 
@@ -14,18 +14,23 @@ const NOTIFICATION_TYPES: { value: NotificationType; label: string }[] = [
 ]
 
 interface NotificationFormProps {
+  notification?: Notification | null
   onSuccess: () => void
+  onCancel?: () => void
 }
 
-export default function NotificationForm({ onSuccess }: NotificationFormProps) {
+export default function NotificationForm({ notification, onSuccess, onCancel }: NotificationFormProps) {
   const supabase = createClient()
   const [exams, setExams] = useState<Pick<Exam, 'id' | 'title'>[]>([])
   const [examSearch, setExamSearch] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
-  const [selectedExam, setSelectedExam] = useState<Pick<Exam, 'id' | 'title'> | null>(null)
-  const [type, setType] = useState<NotificationType>('new_job')
-  const [title, setTitle] = useState('')
+  const [selectedExam, setSelectedExam] = useState<Pick<Exam, 'id' | 'title'> | null>(
+    notification?.exam_id ? { id: notification.exam_id, title: (notification as any).exams?.title ?? 'Linked Exam' } : null
+  )
+  const [type, setType] = useState<NotificationType>(notification?.type ?? 'new_job')
+  const [title, setTitle] = useState(notification?.title ?? '')
   const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [currentPdfUrl, setCurrentPdfUrl] = useState<string | null>(notification?.pdf_url ?? null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -49,7 +54,7 @@ export default function NotificationForm({ onSuccess }: NotificationFormProps) {
     setSuccess(false)
 
     try {
-      let pdf_url: string | null = null
+      let pdf_url: string | null = currentPdfUrl
 
       // Upload PDF if provided
       if (pdfFile) {
@@ -62,26 +67,33 @@ export default function NotificationForm({ onSuccess }: NotificationFormProps) {
         pdf_url = urlData.publicUrl
       }
 
-      const { error: insertError } = await supabase.from('notifications').insert({
-        exam_id: selectedExam?.id ?? null,
-        type,
-        title,
-        pdf_url,
-        published_at: new Date().toISOString(),
-      })
-      if (insertError) throw insertError
+      if (notification?.id) {
+        const { error: updateError } = await supabase
+          .from('notifications')
+          .update({
+            exam_id: selectedExam?.id ?? null,
+            type,
+            title,
+            pdf_url,
+          })
+          .eq('id', notification.id)
+        if (updateError) throw updateError
+      } else {
+        const { error: insertError } = await supabase.from('notifications').insert({
+          exam_id: selectedExam?.id ?? null,
+          type,
+          title,
+          pdf_url,
+          published_at: new Date().toISOString(),
+        })
+        if (insertError) throw insertError
+      }
 
-      // Reset form
-      setTitle('')
-      setSelectedExam(null)
-      setExamSearch('')
-      setType('new_job')
-      setPdfFile(null)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
       onSuccess()
     } catch (err: any) {
-      setError(err.message ?? 'Failed to post notification')
+      setError(err.message ?? 'Failed to save notification')
     } finally {
       setLoading(false)
     }
@@ -189,10 +201,17 @@ export default function NotificationForm({ onSuccess }: NotificationFormProps) {
         />
       </div>
 
-      <Button type="submit" disabled={loading} className="w-full justify-center">
-        <Send size={15} />
-        {loading ? 'Posting…' : 'Post Notification'}
-      </Button>
+      <div className="flex justify-end gap-3 pt-2">
+        {onCancel && (
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
+        <Button type="submit" disabled={loading} className="justify-center">
+          <Send size={15} />
+          {loading ? 'Saving…' : notification?.id ? 'Update Notification' : 'Post Notification'}
+        </Button>
+      </div>
     </form>
   )
 }

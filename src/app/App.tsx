@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   BrowserRouter,
   Routes,
@@ -1996,6 +1997,11 @@ function ExamDetailPage() {
   const hasAgeLimit = Boolean(exam.age_limit && exam.age_limit.trim());
   const activeInfoCount = [hasVacancy, hasAppEnd, hasQualification, hasAgeLimit].filter(Boolean).length;
 
+  const hasShortStats = hasVacancy || hasAppEnd;
+  const shortStatsCount = [hasVacancy, hasAppEnd].filter(Boolean).length;
+  const hasDetailedStats = hasQualification || hasAgeLimit;
+  const detailedStatsCount = [hasQualification, hasAgeLimit].filter(Boolean).length;
+
   // ── Dates & Links active state ──
   const hasAppStart = Boolean(exam.application_start && exam.application_start.trim());
   const hasExamDate = Boolean(exam.exam_date && exam.exam_date.trim());
@@ -2064,52 +2070,72 @@ function ExamDetailPage() {
         )}
       </div>
 
-      {/* Dynamic Key Details Grid — renders ONLY if at least 1 box has data */}
+      {/* Dynamic Key Details Section — renders ONLY if at least 1 box has data */}
       {activeInfoCount > 0 && (
-        <div className={`grid grid-cols-1 ${
-          activeInfoCount === 2 ? 'sm:grid-cols-2' : activeInfoCount === 3 ? 'sm:grid-cols-3' : activeInfoCount >= 4 ? 'grid-cols-2 md:grid-cols-4' : 'sm:grid-cols-1'
-        } gap-4 mb-6`}>
-          {hasVacancy && (
-            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-              <div className="w-10 h-10 rounded-lg bg-orange-50 text-[#FF7A00] flex items-center justify-center mx-auto mb-2">
-                <Briefcase size={20} />
-              </div>
-              <span className="text-xs text-[#5B6880] block font-medium">Total Posts</span>
-              <span className="text-sm md:text-base font-bold text-[#0F1C30]">
-                {exam.vacancy_count!.toLocaleString("en-IN")}
-              </span>
+        <div className="space-y-4 mb-6">
+          {/* Top Row: Short Stat Cards (Total Posts & Last Date to Apply) */}
+          {hasShortStats && (
+            <div className={`grid grid-cols-1 ${shortStatsCount === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2'} gap-4`}>
+              {hasVacancy && (
+                <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center flex flex-col items-center justify-center">
+                  <div className="w-10 h-10 rounded-lg bg-orange-50 text-[#FF7A00] flex items-center justify-center mb-2">
+                    <Briefcase size={20} />
+                  </div>
+                  <span className="text-xs text-[#5B6880] block font-medium">Total Posts</span>
+                  <span className="text-sm md:text-base font-bold text-[#0F1C30]">
+                    {exam.vacancy_count!.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              )}
+
+              {hasAppEnd && (
+                <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center flex flex-col items-center justify-center">
+                  <div className="w-10 h-10 rounded-lg bg-blue-50 text-[#1A3C6E] flex items-center justify-center mb-2">
+                    <Clock size={20} />
+                  </div>
+                  <span className="text-xs text-[#5B6880] block font-medium">Last Date to Apply</span>
+                  <span className={`text-sm font-bold ${jobStatus === "closing-soon" ? "text-[#E03E3E]" : "text-[#0F1C30]"}`}>
+                    {fmtDate(exam.application_end)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
-          {hasAppEnd && (
-            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-              <div className="w-10 h-10 rounded-lg bg-blue-50 text-[#1A3C6E] flex items-center justify-center mx-auto mb-2">
-                <Clock size={20} />
-              </div>
-              <span className="text-xs text-[#5B6880] block font-medium">Last Date to Apply</span>
-              <span className={`text-sm font-bold ${jobStatus === "closing-soon" ? "text-[#E03E3E]" : "text-[#0F1C30]"}`}>
-                {fmtDate(exam.application_end)}
-              </span>
-            </div>
-          )}
+          {/* Bottom Row: Detailed Info Cards (Qualification & Age Limit) */}
+          {hasDetailedStats && (
+            <div className={`grid grid-cols-1 ${detailedStatsCount === 2 ? 'md:grid-cols-2' : 'grid-cols-1'} gap-4`}>
+              {hasQualification && (
+                <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <GraduationCap size={20} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs text-[#5B6880] font-semibold uppercase tracking-wider block mb-1">
+                      Qualification
+                    </span>
+                    <p className="text-sm font-semibold text-[#0F1C30] leading-relaxed whitespace-pre-line">
+                      {exam.qualification}
+                    </p>
+                  </div>
+                </div>
+              )}
 
-          {hasQualification && (
-            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-              <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center mx-auto mb-2">
-                <GraduationCap size={20} />
-              </div>
-              <span className="text-xs text-[#5B6880] block font-medium">Qualification</span>
-              <span className="text-sm font-bold text-[#0F1C30]">{exam.qualification}</span>
-            </div>
-          )}
-
-          {hasAgeLimit && (
-            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-              <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2">
-                <Tag size={20} />
-              </div>
-              <span className="text-xs text-[#5B6880] block font-medium">Age Limit</span>
-              <span className="text-sm font-bold text-[#0F1C30]">{exam.age_limit}</span>
+              {hasAgeLimit && (
+                <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Tag size={20} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs text-[#5B6880] font-semibold uppercase tracking-wider block mb-1">
+                      Age Limit
+                    </span>
+                    <p className="text-sm font-semibold text-[#0F1C30] leading-relaxed whitespace-pre-line">
+                      {exam.age_limit}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2158,6 +2184,7 @@ function ExamDetailPage() {
           </div>
           <div className="exam-description text-[#374151] text-sm leading-relaxed">
             <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
               components={{
                 h1: ({ children }) => <h1 className="text-xl font-extrabold text-[#1A3C6E] mt-6 mb-3 first:mt-0" style={{ fontFamily: "'Poppins', sans-serif" }}>{children}</h1>,
                 h2: ({ children }) => <h2 className="text-lg font-extrabold text-[#1A3C6E] mt-5 mb-2 first:mt-0" style={{ fontFamily: "'Poppins', sans-serif" }}>{children}</h2>,
@@ -2188,9 +2215,58 @@ function ExamDetailPage() {
                 code: ({ children }) => (
                   <code className="bg-gray-100 text-[#0F1C30] px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>
                 ),
+                table: ({ children }) => (
+                  <div className="overflow-x-auto my-6 rounded-xl border border-gray-200 shadow-sm bg-white">
+                    <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                      {children}
+                    </table>
+                  </div>
+                ),
+                thead: ({ children }) => (
+                  <thead className="bg-[#1A3C6E] text-white font-bold [&_tr]:bg-[#1A3C6E] [&_tr]:hover:bg-[#1A3C6E] [&_th]:bg-[#1A3C6E] [&_th]:text-white">{children}</thead>
+                ),
+                tbody: ({ children }) => (
+                  <tbody className="divide-y divide-gray-200 [&_tr]:even:bg-[#F4F5F7] [&_tr]:odd:bg-white [&_tr]:hover:bg-gray-100/60">{children}</tbody>
+                ),
+                tr: ({ children }) => (
+                  <tr className="transition-colors">
+                    {children}
+                  </tr>
+                ),
+                th: ({ children, style }) => (
+                  <th
+                    style={style}
+                    className="px-4 py-3 bg-[#1A3C6E] text-white font-bold text-xs sm:text-sm tracking-wider border-b border-[#1A3C6E] hover:bg-[#1A3C6E] hover:text-white"
+                  >
+                    {children}
+                  </th>
+                ),
+                td: ({ children, style }) => {
+                  const text = typeof children === "string" ? children.trim() : Array.isArray(children) ? children.map(c => typeof c === "string" ? c : "").join("").trim() : "";
+                  const isNumeric = /^\d+$/.test(text);
+                  return (
+                    <td
+                      style={style}
+                      className={`px-4 py-3 text-xs sm:text-sm text-[#0F1C30] border-t border-gray-100 ${
+                        isNumeric ? "text-center" : "text-left"
+                      }`}
+                    >
+                      {children}
+                    </td>
+                  );
+                },
+                del: ({ children }) => (
+                  <del className="line-through text-gray-400">{children}</del>
+                ),
+                input: ({ node, ...props }) => (
+                  <input
+                    {...props}
+                    className="mr-2 accent-[#FF7A00] rounded cursor-default"
+                  />
+                ),
               }}
             >
-              {exam.description ?? ''}
+              {(exam.description ?? '').replace(/\\n/g, '\n').replace(/\r\n/g, '\n')}
             </ReactMarkdown>
           </div>
         </div>
@@ -2565,7 +2641,24 @@ function AppContent() {
         setCategories(catsData);
         setAllJobTags(jobTagsData);
         setDbStates(statesData);
-        setTickerItems((notifsRes.data ?? []).map(formatTickerItem));
+        const notifTickerItems: TickerItem[] = (notifsRes.data ?? []).map(formatTickerItem);
+        const examTickerItems: TickerItem[] = normalizedExams.slice(0, 10).map((e) => ({
+          id: `exam-${e.id}`,
+          type: "new_job",
+          title: `${e.title} — Recruitment Notification`,
+          text: `🔔 ${e.title} — Recruitment Notification`,
+          examSlug: e.slug,
+          pdfUrl: null,
+        }));
+
+        const combinedTickerItems = [...notifTickerItems];
+        for (const item of examTickerItems) {
+          if (!combinedTickerItems.some(n => n.examSlug === item.examSlug)) {
+            combinedTickerItems.push(item);
+          }
+        }
+
+        setTickerItems(combinedTickerItems);
 
         setCatCounts({
           "new-jobs": activeCountRes.count ?? 0,
@@ -2596,7 +2689,24 @@ function AppContent() {
         .gte("published_at", startOfToday)
         .order("published_at", { ascending: false })
         .limit(20);
-      if (data) setTickerItems(data.map(formatTickerItem));
+      if (data) {
+        const notifItems = data.map(formatTickerItem);
+        const examItems = exams.slice(0, 10).map((e) => ({
+          id: `exam-${e.id}`,
+          type: "new_job",
+          title: `${e.title} — Recruitment Notification`,
+          text: `🔔 ${e.title} — Recruitment Notification`,
+          examSlug: e.slug,
+          pdfUrl: null,
+        }));
+        const merged = [...notifItems];
+        for (const item of examItems) {
+          if (!merged.some(n => n.examSlug === item.examSlug)) {
+            merged.push(item);
+          }
+        }
+        setTickerItems(merged);
+      }
     }, 5 * 60 * 1000);
 
     return () => clearInterval(interval);

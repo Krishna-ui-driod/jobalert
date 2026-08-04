@@ -4,7 +4,8 @@ import { createClient } from '@/lib/supabase/client'
 import { Category, State, ExamStatus, JobTag } from '@/lib/types'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import { Search, Send, FileText, Bell, X, Plus, Trash2, Link } from 'lucide-react'
+import { Search, Send, FileText, Bell, X, Plus, Trash2, Link, AlertTriangle } from 'lucide-react'
+import { detectMalformedTable } from '@/lib/utils'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -211,6 +212,7 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
       if (contentType === 'new_exam') {
         const payload = {
           ...examForm,
+          description: (examForm.description ?? '').replace(/\\n/g, '\n').replace(/\r\n/g, '\n'),
           vacancy_count: examForm.vacancy_count !== '' && examForm.vacancy_count !== null ? Number(examForm.vacancy_count) : null,
           details: null,
           category_id: examForm.category_id || null,
@@ -246,15 +248,6 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
             validLinks.map((l, i) => ({ exam_id: examId, label: l.label.trim(), url: l.url.trim(), display_order: i }))
           )
         }
-
-        // Also create a "new_job" notification automatically
-        await supabase.from('notifications').insert({
-          exam_id: examId,
-          type: 'new_job',
-          title: `${examForm.title} — Official Notification Released`,
-          published_at: new Date().toISOString(),
-        })
-
       } else {
         // ──── Save notification ────
         if (!selectedExam) {
@@ -441,6 +434,15 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
                     onChange={e => setExamField('description', e.target.value)}
                     placeholder={`Official recruitment notification released. Eligible candidates can apply online.\n\nEligibility: Bachelor's degree\nVacancies: e.g. 17,727 posts\nFee: General Rs.100 | SC/ST Free\nHow to Apply: Visit the official website and complete registration`}
                   />
+                  {detectMalformedTable(examForm.description) && (
+                    <div className="mt-2.5 bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3 rounded-lg flex items-start gap-2.5 shadow-sm animate-in fade-in duration-200">
+                      <AlertTriangle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="leading-relaxed">
+                        <span className="font-bold text-amber-950">Table Formatting Warning: </span>
+                        This looks like a malformed table — check that every row has the same number of | columns and a separator row (|---|---|) is right after the header.
+                      </div>
+                    </div>
+                  )}
                 </Field>
 
                 {/* Additional Links Section */}

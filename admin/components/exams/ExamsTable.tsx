@@ -6,6 +6,7 @@ import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import ExamForm from './ExamForm'
+import NotificationForm from '../notifications/NotificationForm'
 import { Search, Pencil, Trash2, RefreshCw, FileText, Bell, Download } from 'lucide-react'
 
 export interface UnifiedListing {
@@ -43,6 +44,9 @@ export default function ExamsTable() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editExam, setEditExam] = useState<Exam | null>(null)
   
+  const [notifModalOpen, setNotifModalOpen] = useState(false)
+  const [editNotif, setEditNotif] = useState<Notification | null>(null)
+
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; source: 'exam' | 'notification'; title: string } | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
@@ -253,15 +257,21 @@ export default function ExamsTable() {
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {item.source === 'exam' && (
-                          <button
-                            onClick={() => { setEditExam(item.originalExam!); setModalOpen(true) }}
-                            className="p-1.5 text-[#1A3C6E] hover:bg-[#EEF2F8] rounded-lg transition-colors"
-                            title="Edit Exam"
-                          >
-                            <Pencil size={15} />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => {
+                            if (item.source === 'exam') {
+                              setEditExam(item.originalExam!)
+                              setModalOpen(true)
+                            } else {
+                              setEditNotif(item.originalNotif!)
+                              setNotifModalOpen(true)
+                            }
+                          }}
+                          className="p-1.5 text-[#1A3C6E] hover:bg-[#EEF2F8] rounded-lg transition-colors"
+                          title={item.source === 'exam' ? 'Edit Exam' : 'Edit Notification'}
+                        >
+                          <Pencil size={15} />
+                        </button>
                         <button
                           onClick={() => setDeleteTarget({ id: item.id, source: item.source, title: item.title })}
                           className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
@@ -291,6 +301,20 @@ export default function ExamsTable() {
           categories={[]}
           onSuccess={() => { setModalOpen(false); setEditExam(null); fetchData() }}
           onCancel={() => { setModalOpen(false); setEditExam(null) }}
+        />
+      </Modal>
+
+      {/* Edit Modal (for Notification edits) */}
+      <Modal
+        open={notifModalOpen}
+        onClose={() => { setNotifModalOpen(false); setEditNotif(null) }}
+        title="Edit Notification"
+        width="max-w-xl"
+      >
+        <NotificationForm
+          notification={editNotif}
+          onSuccess={() => { setNotifModalOpen(false); setEditNotif(null); fetchData() }}
+          onCancel={() => { setNotifModalOpen(false); setEditNotif(null) }}
         />
       </Modal>
 
