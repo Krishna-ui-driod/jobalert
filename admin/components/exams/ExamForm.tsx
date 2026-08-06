@@ -1,9 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Exam, Category, State, ExamStatus, JobTag } from '@/lib/types'
+import { Exam, Category, State, ExamStatus } from '@/lib/types'
 import Button from '@/components/ui/Button'
-import { Plus, Trash2, Link, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, Link, AlertTriangle, X } from 'lucide-react'
 import { detectMalformedTable } from '@/lib/utils'
 
 interface ExamFormProps {
@@ -37,15 +37,18 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
   const supabase = createClient()
   const [states, setStates] = useState<State[]>([])
   const [selectedStates, setSelectedStates] = useState<string[]>([])
-  const [jobTags, setJobTags] = useState<JobTag[]>([])
-  const [selectedJobTags, setSelectedJobTags] = useState<string[]>([])
+  
+  // On-the-fly tags state for this post
+  const [postTags, setPostTags] = useState<{ name: string; color: string }[]>([])
+  const [tagInput, setTagInput] = useState('')
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
 
   // Links
   const [examLinks, setExamLinks] = useState<{ id?: string; label: string; url: string }[]>([])
-  const addLink = () => setExamLinks(prev => [...prev, { label: '', url: '' }])
+  const addLink = (label: string = '') => setExamLinks(prev => [...prev, { label, url: '' }])
   const removeLink = (i: number) => setExamLinks(prev => prev.filter((_, idx) => idx !== i))
   const updateLink = (i: number, field: 'label' | 'url', val: string) =>
     setExamLinks(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: val } : l))
@@ -54,28 +57,24 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
     title: exam?.title ?? '',
     slug: exam?.slug ?? '',
     category_id: exam?.category_id ?? '',
-    department: exam?.department ?? '',
     description: exam?.description ?? '',
-    qualification: exam?.qualification ?? '',
-    age_limit: exam?.age_limit ?? '',
-    application_start: exam?.application_start ?? '',
     application_end: exam?.application_end ?? '',
-    exam_date: exam?.exam_date ?? '',
+    auto_delete_at: exam?.auto_delete_at ?? '',
     status: exam?.status ?? 'upcoming' as ExamStatus,
-    official_link: exam?.official_link ?? '',
     is_all_india: exam?.is_all_india ?? false,
-    vacancy_count: exam?.vacancy_count ?? '',
   })
 
 
   useEffect(() => {
     supabase.from('states').select('*').order('name').then(({ data }) => setStates(data ?? []))
-    supabase.from('job_tags').select('*').order('name').then(({ data }) => setJobTags(data ?? []))
     if (exam) {
       supabase.from('exam_states').select('state_id').eq('exam_id', exam.id)
         .then(({ data }) => setSelectedStates(data?.map(r => r.state_id) ?? []))
-      supabase.from('exam_job_tags').select('job_tag_id').eq('exam_id', exam.id)
-        .then(({ data }) => setSelectedJobTags(data?.map(r => r.job_tag_id) ?? []))
+      supabase.from('exam_job_tags').select('job_tags(name, color)').eq('exam_id', exam.id)
+        .then(({ data }) => {
+          const tags = (data ?? []).map((r: any) => r.job_tags).filter(Boolean)
+          setPostTags(tags)
+        })
       supabase.from('exam_links').select('id, label, url, display_order').eq('exam_id', exam.id).order('display_order')
         .then(({ data }) => setExamLinks(data?.map(r => ({ id: r.id, label: r.label, url: r.url })) ?? []))
     }
@@ -91,40 +90,25 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
   const toggleState = (id: string) =>
     setSelectedStates(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id])
 
-  const toggleJobTag = (id: string) =>
-    setSelectedJobTags(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])
+  const COLOR_PRESETS = ['#1A3C6E', '#FF7A00', '#059669', '#7C3AED', '#DC2626', '#DB2777', '#0284C7', '#D97706']
 
-  const [newTagModalOpen, setNewTagModalOpen] = useState(false)
-  const [newTagName, setNewTagName] = useState('')
-  const [newTagColor, setNewTagColor] = useState('#1A3C6E')
-  const [creatingTag, setCreatingTag] = useState(false)
+  const handleAddPostTag = () => {
+    const trimmed = tagInput.trim()
+    if (!trimmed) return
+    if (postTags.some(t => t.name.toLowerCase() === trimmed.toLowerCase())) {
+      setTagInput('')
+      return
+    }
+    const color = COLOR_PRESETS[postTags.length % COLOR_PRESETS.length]
+    setPostTags(prev => [...prev, { name: trimmed, color }])
+    setTagInput('')
+  }
+
+  const handleRemovePostTag = (index: number) => {
+    setPostTags(prev => prev.filter((_, i) => i !== index))
+  }
 
   const [notAnnouncedAppEnd, setNotAnnouncedAppEnd] = useState(!exam?.application_end)
-  const [pendingOfficialLink, setPendingOfficialLink] = useState(!exam?.official_link)
-
-  const handleCreateTag = async () => {
-    if (!newTagName.trim()) return
-    setCreatingTag(true)
-    try {
-      const slug = slugify(newTagName)
-      const { data, error } = await supabase
-        .from('job_tags')
-        .insert({ name: newTagName.trim(), slug, color: newTagColor })
-        .select()
-        .single()
-      if (error) throw error
-      if (data) {
-        setJobTags(prev => [...prev, data])
-        setSelectedJobTags(prev => [...prev, data.id])
-        setNewTagName('')
-        setNewTagModalOpen(false)
-      }
-    } catch (err: any) {
-      alert(`Error creating tag: ${err.message}`)
-    } finally {
-      setCreatingTag(false)
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -134,13 +118,17 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
     const payload = {
       ...form,
       description: (form.description ?? '').replace(/\\n/g, '\n').replace(/\r\n/g, '\n'),
-      vacancy_count: form.vacancy_count !== '' && form.vacancy_count !== null ? Number(form.vacancy_count) : null,
+      department: null,
+      qualification: null,
+      age_limit: null,
+      vacancy_count: null,
+      official_link: null,
       details: null,
       category_id: form.category_id || null,
-      exam_date: form.exam_date || null,
-      application_start: form.application_start || null,
+      exam_date: null,
+      application_start: null,
       application_end: notAnnouncedAppEnd ? null : (form.application_end || null),
-      official_link: pendingOfficialLink ? null : (form.official_link || null),
+      auto_delete_at: form.auto_delete_at || null,
     }
 
     try {
@@ -164,13 +152,30 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
         }
       }
 
-      // Sync exam_job_tags
+      // Sync exam_job_tags (upserting tags on-the-fly)
       if (examId) {
         await supabase.from('exam_job_tags').delete().eq('exam_id', examId)
-        if (selectedJobTags.length > 0) {
-          await supabase.from('exam_job_tags').insert(
-            selectedJobTags.map(job_tag_id => ({ exam_id: examId!, job_tag_id }))
-          )
+        if (postTags.length > 0) {
+          const tagIds: string[] = []
+          for (const t of postTags) {
+            const slug = slugify(t.name)
+            const { data: existing } = await supabase.from('job_tags').select('id').eq('slug', slug).maybeSingle()
+            if (existing) {
+              tagIds.push(existing.id)
+            } else {
+              const { data: created } = await supabase.from('job_tags').insert({
+                name: t.name,
+                slug,
+                color: t.color,
+              }).select('id').single()
+              if (created) tagIds.push(created.id)
+            }
+          }
+          if (tagIds.length > 0) {
+            await supabase.from('exam_job_tags').insert(
+              tagIds.map(job_tag_id => ({ exam_id: examId!, job_tag_id }))
+            )
+          }
         }
       }
 
@@ -202,8 +207,6 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
 
   const inputCls = INPUT_CLS
 
-  const COLOR_PRESETS = ['#1A3C6E', '#FF7A00', '#059669', '#7C3AED', '#DC2626', '#DB2777', '#0284C7', '#D97706']
-
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
@@ -220,59 +223,21 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
         <Field label="Slug" required>
           <input className={inputCls} value={form.slug} onChange={e => set('slug', e.target.value)} required placeholder="ssc-cgl-2026" />
         </Field>
-        <Field label="Department">
-          <input className={inputCls} value={form.department} onChange={e => set('department', e.target.value)} placeholder="Staff Selection Commission" />
-        </Field>
         <Field label="Status" required>
           <select className={inputCls} value={form.status} onChange={e => set('status', e.target.value)}>
             {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
           </select>
         </Field>
 
-        {/* Official Website Link with Not Released toggle */}
-        <Field label="Official Website (Apply Link)">
-          <input
-            className={inputCls}
-            value={form.official_link}
-            onChange={e => set('official_link', e.target.value)}
-            placeholder="https://ssc.gov.in"
-            disabled={pendingOfficialLink}
-          />
-          <label className="flex items-center gap-2 mt-1.5 cursor-pointer text-xs text-[#5B6880]">
-            <input
-              type="checkbox"
-              checked={pendingOfficialLink}
-              onChange={e => {
-                setPendingOfficialLink(e.target.checked)
-                if (e.target.checked) set('official_link', '')
-              }}
-              className="accent-[#1A3C6E]"
-            />
-            <span>Link pending / not announced yet</span>
-          </label>
-        </Field>
-
-        <Field label="Qualification">
-          <input className={inputCls} value={form.qualification} onChange={e => set('qualification', e.target.value)} placeholder="Graduation" />
-        </Field>
-        <Field label="Age Limit Summary">
-          <input className={inputCls} value={form.age_limit} onChange={e => set('age_limit', e.target.value)} placeholder="18–32 years" />
-        </Field>
-        <Field label="Total Posts / Vacancies">
-          <input type="number" min="0" className={inputCls} value={form.vacancy_count} onChange={e => set('vacancy_count', e.target.value)} placeholder="e.g. 17727 (Leave empty if not announced)" />
-        </Field>
-        <Field label="Application Start">
-          <input type="date" className={inputCls} value={form.application_start} onChange={e => set('application_start', e.target.value)} />
-        </Field>
-
-        {/* Application End with Not Announced toggle */}
+        {/* Application End with Not Announced toggle (Text input for easy copy/paste) */}
         <Field label="Application End (Last Date)">
           <input
-            type="date"
+            type="text"
             className={inputCls}
             value={form.application_end}
             onChange={e => set('application_end', e.target.value)}
             disabled={notAnnouncedAppEnd}
+            placeholder="e.g. 25-08-2026 or 25 Aug 2026"
           />
           <label className="flex items-center gap-2 mt-1.5 cursor-pointer text-xs text-[#5B6880]">
             <input
@@ -288,9 +253,18 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
           </label>
         </Field>
 
-        <Field label="Exam Date">
-          <input type="date" className={inputCls} value={form.exam_date} onChange={e => set('exam_date', e.target.value)} />
+        {/* Auto Delete Date */}
+        <Field label="Auto Delete Date">
+          <input
+            type="text"
+            className={inputCls}
+            value={form.auto_delete_at}
+            onChange={e => set('auto_delete_at', e.target.value)}
+            placeholder="e.g. 2026-08-30 or 30 Aug 2026"
+          />
+          <p className="text-xs text-[#5B6880] mt-1">Optional — post will be automatically deleted on this date</p>
         </Field>
+
         <Field label="PDF / Official Document">
           <input type="file" accept=".pdf,.doc,.docx" onChange={e => setPdfFile(e.target.files?.[0] ?? null)}
             className="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#EEF2F8] file:text-[#1A3C6E] hover:file:bg-[#1A3C6E] hover:file:text-white transition-all" />
@@ -319,19 +293,49 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
 
       {/* Additional Links */}
       <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <label className="text-xs font-bold text-[#0F1C30] uppercase tracking-wider flex items-center gap-2">
-            <Link size={13} className="text-[#1A3C6E]" /> Additional Links
+            <Link size={13} className="text-[#1A3C6E]" /> Additional / Important Links
           </label>
-          <button
-            type="button"
-            onClick={addLink}
-            className="flex items-center gap-1 text-xs font-bold text-[#FF7A00] hover:text-[#E86E00] transition-colors"
-          >
-            <Plus size={13} /> Add Link
-          </button>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => addLink('Syllabus')}
+              className="px-2.5 py-1 text-[11px] font-semibold bg-sky-100 text-sky-800 rounded-md hover:bg-sky-200 transition-colors"
+            >
+              + Syllabus Link
+            </button>
+            <button
+              type="button"
+              onClick={() => addLink('Admit Card')}
+              className="px-2.5 py-1 text-[11px] font-semibold bg-amber-100 text-amber-800 rounded-md hover:bg-amber-200 transition-colors"
+            >
+              + Admit Card Link
+            </button>
+            <button
+              type="button"
+              onClick={() => addLink('Answer Key')}
+              className="px-2.5 py-1 text-[11px] font-semibold bg-purple-100 text-purple-800 rounded-md hover:bg-purple-200 transition-colors"
+            >
+              + Answer Key Link
+            </button>
+            <button
+              type="button"
+              onClick={() => addLink('Result')}
+              className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-100 text-emerald-800 rounded-md hover:bg-emerald-200 transition-colors"
+            >
+              + Result Link
+            </button>
+            <button
+              type="button"
+              onClick={() => addLink('')}
+              className="px-2.5 py-1 text-[11px] font-semibold bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors flex items-center gap-0.5"
+            >
+              <Plus size={12} /> Custom Link
+            </button>
+          </div>
         </div>
-        <p className="text-xs text-[#5B6880]">Add supplementary links (Official PDF, Syllabus, Apply Online, etc.). These appear on the public exam page below the Apply button.</p>
+        <p className="text-xs text-[#5B6880]">Add supplementary links (Official PDF, Syllabus, Apply Online, Result, Answer Key). These appear on the public exam page.</p>
         {examLinks.length === 0 ? (
           <p className="text-xs text-[#5B6880] italic">No links added yet. Click "+ Add Link" to add one.</p>
         ) : (
@@ -365,74 +369,55 @@ export default function ExamForm({ exam, categories, onSuccess, onCancel }: Exam
         )}
       </div>
 
-      {/* Job Type Tags (Fix 6a: Create on the fly) */}
+      {/* Job Type Tags — Dynamic Pills Creator */}
       <Field label="Job Type Tags">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-[#5B6880]">{selectedJobTags.length} tag(s) selected</span>
+        <p className="text-xs text-[#5B6880] mb-2">Type a tag name and press Enter or click Add Tag (e.g. Apprentice, Police, Result).</p>
+        <div className="flex gap-2 mb-3">
+          <input
+            type="text"
+            value={tagInput}
+            onChange={e => setTagInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                handleAddPostTag()
+              }
+            }}
+            placeholder="Enter tag name…"
+            className={`${inputCls} flex-1`}
+          />
           <button
             type="button"
-            onClick={() => setNewTagModalOpen(!newTagModalOpen)}
-            className="text-xs font-bold text-[#FF7A00] hover:underline flex items-center gap-1"
+            onClick={handleAddPostTag}
+            disabled={!tagInput.trim()}
+            className="px-4 py-2 bg-[#1A3C6E] text-white text-xs font-bold rounded-lg hover:bg-[#FF7A00] transition-colors disabled:opacity-50 flex-shrink-0"
           >
-            + Create New Tag
+            + Add Tag
           </button>
         </div>
 
-        {/* Inline New Tag Creator */}
-        {newTagModalOpen && (
-          <div className="bg-[#EEF2F8] p-3 rounded-lg border border-[#1A3C6E]/20 mb-3 space-y-2">
-            <p className="text-xs font-bold text-[#0F1C30]">Add New Job Tag</p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newTagName}
-                onChange={e => setNewTagName(e.target.value)}
-                placeholder="e.g. Apprentice, Assistant"
-                className="flex-1 border border-gray-300 rounded px-2.5 py-1 text-xs text-[#0F1C30] outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleCreateTag}
-                disabled={creatingTag || !newTagName.trim()}
-                className="bg-[#1A3C6E] text-white font-bold text-xs px-3 py-1 rounded hover:bg-[#FF7A00] transition-colors disabled:opacity-50"
-              >
-                {creatingTag ? 'Creating…' : 'Save Tag'}
-              </button>
-            </div>
-            <div className="flex items-center gap-1.5 pt-1">
-              <span className="text-[11px] text-[#5B6880] font-medium mr-1">Badge Color:</span>
-              {COLOR_PRESETS.map(c => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setNewTagColor(c)}
-                  className={`w-5 h-5 rounded-full border border-black/10 transition-transform ${newTagColor === c ? 'scale-125 ring-2 ring-[#1A3C6E]' : ''}`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {jobTags.length === 0 ? (
-            <p className="text-xs text-[#5B6880] col-span-full">No tags found. Click "+ Create New Tag" above to add your first tag.</p>
-          ) : jobTags.map(tag => (
-            <label key={tag.id} className="flex items-center gap-2 cursor-pointer text-sm">
-              <input
-                type="checkbox"
-                checked={selectedJobTags.includes(tag.id)}
-                onChange={() => toggleJobTag(tag.id)}
-                className="accent-[#1A3C6E]"
-              />
+        <div className="flex flex-wrap gap-2">
+          {postTags.length === 0 ? (
+            <p className="text-xs text-[#5B6880] italic">No tags added for this post yet.</p>
+          ) : (
+            postTags.map((t, idx) => (
               <span
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
-                style={{ backgroundColor: tag.color + '20', color: tag.color }}
+                key={idx}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold shadow-xs"
+                style={{ backgroundColor: t.color + '25', color: t.color }}
               >
-                ● {tag.name}
+                ● {t.name}
+                <button
+                  type="button"
+                  onClick={() => handleRemovePostTag(idx)}
+                  className="hover:opacity-80 transition-opacity ml-0.5"
+                  title="Remove tag"
+                >
+                  <X size={13} />
+                </button>
               </span>
-            </label>
-          ))}
+            ))
+          )}
         </div>
       </Field>
 

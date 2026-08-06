@@ -177,20 +177,20 @@ export default function DashboardPage() {
     : []
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-[#0F1C30] font-bold text-2xl">Dashboard</h1>
-          <p className="text-[#5B6880] text-sm mt-1">
+          <h1 className="text-[#0F1C30] font-bold text-xl sm:text-2xl">Dashboard</h1>
+          <p className="text-[#5B6880] text-xs sm:text-sm mt-1">
             Overview of JobAlert —{' '}
-            {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            {new Date().toLocaleDateString('en-IN', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
           </p>
         </div>
         <button
           onClick={() => fetchAll(true)}
           disabled={refreshing}
-          className="flex items-center gap-2 text-xs font-semibold text-[#5B6880] hover:text-[#1A3C6E] border border-gray-200 rounded-lg px-3 py-2 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 text-xs font-semibold text-[#5B6880] hover:text-[#1A3C6E] border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors disabled:opacity-50 shadow-xs"
         >
           <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
           {refreshing ? 'Refreshing…' : `Refreshed ${lastRefreshed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}
@@ -198,17 +198,17 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-3 gap-5 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 mb-6 sm:mb-8">
         {loading
           ? [1, 2, 3, 4, 5, 6].map(i => <StatSkeleton key={i} />)
           : cards.map(({ label, value, icon: Icon, color, light }) => (
-            <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
-              <div className={`w-12 h-12 rounded-xl ${light} flex items-center justify-center flex-shrink-0`}>
+            <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5 flex items-center gap-4">
+              <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl ${light} flex items-center justify-center flex-shrink-0`}>
                 <Icon size={22} className={color.replace('bg-', 'text-')} />
               </div>
               <div>
                 <p className="text-[#5B6880] text-xs font-medium">{label}</p>
-                <p className="text-[#0F1C30] font-bold text-2xl mt-0.5">{value.toLocaleString('en-IN')}</p>
+                <p className="text-[#0F1C30] font-bold text-xl sm:text-2xl mt-0.5">{value.toLocaleString('en-IN')}</p>
               </div>
             </div>
           ))

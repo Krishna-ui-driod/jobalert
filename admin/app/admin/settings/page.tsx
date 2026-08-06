@@ -12,30 +12,30 @@ export default async function SettingsPage() {
   const { data: siteSettings } = await supabase.from('site_settings').select('*').eq('id', 'default').single()
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl">
       <div className="mb-6">
-        <h1 className="text-[#0F1C30] font-bold text-2xl">Settings</h1>
-        <p className="text-[#5B6880] text-sm mt-1">Account info and project configuration.</p>
+        <h1 className="text-[#0F1C30] font-bold text-xl sm:text-2xl">Settings</h1>
+        <p className="text-[#5B6880] text-xs sm:text-sm mt-1">Account info and project configuration.</p>
       </div>
 
       <div className="space-y-5">
         {/* Social Links Config (Fix 3) */}
         <SocialLinksForm initialData={siteSettings} />
         {/* Account */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-          <h2 className="font-bold text-[#0F1C30] text-sm flex items-center gap-2 mb-5">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6">
+          <h2 className="font-bold text-[#0F1C30] text-sm flex items-center gap-2 mb-4 sm:mb-5">
             <Shield size={15} className="text-[#FF7A00]" /> Your Account
           </h2>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center py-3 border-b border-gray-50">
+          <div className="space-y-3 sm:space-y-4">
+            <div className="flex justify-between items-center py-2.5 sm:py-3 border-b border-gray-50 flex-wrap gap-2">
               <span className="text-sm text-[#5B6880] font-medium">Email</span>
-              <span className="text-sm text-[#0F1C30] font-semibold">{user?.email}</span>
+              <span className="text-sm text-[#0F1C30] font-semibold truncate max-w-xs">{user?.email}</span>
             </div>
-            <div className="flex justify-between items-center py-3 border-b border-gray-50">
+            <div className="flex justify-between items-center py-2.5 sm:py-3 border-b border-gray-50 flex-wrap gap-2">
               <span className="text-sm text-[#5B6880] font-medium">User ID</span>
               <span className="text-xs text-[#5B6880] font-mono">{user?.id?.slice(0, 18)}…</span>
             </div>
-            <div className="flex justify-between items-center py-3">
+            <div className="flex justify-between items-center py-2.5 sm:py-3">
               <span className="text-sm text-[#5B6880] font-medium">Role</span>
               <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-700">
                 SUPER ADMIN
@@ -45,18 +45,18 @@ export default async function SettingsPage() {
         </div>
 
         {/* Supabase config */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-          <h2 className="font-bold text-[#0F1C30] text-sm flex items-center gap-2 mb-5">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6">
+          <h2 className="font-bold text-[#0F1C30] text-sm flex items-center gap-2 mb-4 sm:mb-5">
             <Database size={15} className="text-[#FF7A00]" /> Supabase Configuration
           </h2>
           <div className="space-y-3">
-            <div className="flex justify-between items-center py-3 border-b border-gray-50">
+            <div className="flex justify-between items-center py-2.5 sm:py-3 border-b border-gray-50 flex-wrap gap-2">
               <span className="text-sm text-[#5B6880] font-medium">Project URL</span>
               <span className="text-sm text-[#0F1C30] font-mono truncate max-w-xs text-xs">
                 {process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('https://', '') ?? 'Not configured'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-3">
+            <div className="flex justify-between items-center py-2.5 sm:py-3">
               <span className="text-sm text-[#5B6880] font-medium">Anon Key</span>
               <span className="text-sm text-[#0F1C30] font-mono">
                 {process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '✅ Configured' : '❌ Missing'}
@@ -69,11 +69,11 @@ export default async function SettingsPage() {
         </div>
 
         {/* Links */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-          <h2 className="font-bold text-[#0F1C30] text-sm flex items-center gap-2 mb-5">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6">
+          <h2 className="font-bold text-[#0F1C30] text-sm flex items-center gap-2 mb-4 sm:mb-5">
             <Globe size={15} className="text-[#FF7A00]" /> Quick Links
           </h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
               { label: 'Supabase Dashboard', href: 'https://supabase.com/dashboard' },
               { label: 'Homepage (Dev)',      href: 'http://localhost:5173' },

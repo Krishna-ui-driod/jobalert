@@ -58,14 +58,39 @@ export default function ExamsTable() {
         supabase.from('notifications').select('*, exams(title)').order('published_at', { ascending: false }),
       ])
 
-      const examItems: UnifiedListing[] = (examsRes.data ?? []).map(e => ({
+      // Auto deletion check for expired posts
+      const now = new Date().getTime()
+      const expiredExamIds: string[] = []
+
+      const activeExams = (examsRes.data ?? []).filter(e => {
+        if (e.auto_delete_at) {
+          const expTime = new Date(e.auto_delete_at).getTime()
+          if (!isNaN(expTime) && expTime <= now) {
+            expiredExamIds.push(e.id)
+            return false
+          }
+        }
+        return true
+      })
+
+      if (expiredExamIds.length > 0) {
+        supabase.from('exams').delete().in('id', expiredExamIds).then(() => {
+          console.log(`Auto-deleted ${expiredExamIds.length} expired post(s)`)
+        })
+      }
+
+      const examItems: UnifiedListing[] = activeExams.map(e => ({
         id: e.id,
         source: 'exam',
         contentType: 'exam',
         typeLabel: 'Exam Notification',
         title: e.title,
-        subtitle: e.department || e.categories?.name || 'Recruitment Exam',
-        dateDisplay: e.application_end ? `End: ${e.application_end}` : 'Date: Pending',
+        subtitle: e.categories?.name || 'Recruitment Exam',
+        dateDisplay: e.application_end
+          ? `End: ${e.application_end}${e.auto_delete_at ? ` · Delete: ${e.auto_delete_at}` : ''}`
+          : e.auto_delete_at
+            ? `Delete: ${e.auto_delete_at}`
+            : 'Date: Pending',
         status: e.status,
         official_link: e.official_link,
         created_at: e.created_at,
@@ -160,43 +185,45 @@ export default function ExamsTable() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-[#0F1C30] font-bold text-2xl">Content Listings</h1>
-          <p className="text-[#5B6880] text-sm mt-1">
+          <h1 className="text-[#0F1C30] font-bold text-xl sm:text-2xl">Content Listings</h1>
+          <p className="text-[#5B6880] text-xs sm:text-sm mt-1">
             Manage all recruitment exams and posted notifications in one place ({filtered.length} item{filtered.length !== 1 ? 's' : ''})
           </p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-5 flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-52">
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3.5 sm:p-4 mb-5 flex flex-col sm:flex-row flex-wrap gap-3">
+        <div className="relative flex-1 min-w-full sm:min-w-52">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by title, department, or linked exam…"
+            placeholder="Search by title or linked exam…"
             className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#1A3C6E] focus:ring-2 focus:ring-[#1A3C6E]/10"
           />
         </div>
         
         {/* Content Type Filter */}
-        <select
-          value={typeFilter}
-          onChange={e => setTypeFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#0F1C30] outline-none focus:border-[#1A3C6E] font-medium"
-        >
-          {TYPE_OPTIONS.map(t => (
-            <option key={t.value} value={t.value}>{t.label}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            className="flex-1 sm:flex-initial border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#0F1C30] outline-none focus:border-[#1A3C6E] font-medium bg-white"
+          >
+            {TYPE_OPTIONS.map(t => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
 
-        <Button variant="ghost" size="sm" onClick={fetchData} className="gap-1.5">
-          <RefreshCw size={14} /> Refresh
-        </Button>
+          <Button variant="ghost" size="sm" onClick={fetchData} className="gap-1.5 flex-shrink-0">
+            <RefreshCw size={14} /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Table */}
@@ -211,7 +238,7 @@ export default function ExamsTable() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr className="bg-[#EEF2F8] border-b border-gray-100">
                   <th className="text-left text-xs font-bold text-[#1A3C6E] uppercase tracking-wider px-5 py-3.5">
@@ -256,7 +283,7 @@ export default function ExamsTable() {
                       {new Date(item.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => {
                             if (item.source === 'exam') {

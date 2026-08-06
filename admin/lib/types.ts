@@ -54,6 +54,7 @@ export interface Exam {
   official_link: string | null
   is_all_india: boolean
   vacancy_count: number | null
+  auto_delete_at?: string | null
   created_at: string
   updated_at: string
   categories?: Category | null
@@ -66,6 +67,8 @@ export interface Notification {
   type: NotificationType
   title: string
   pdf_url: string | null
+  link_url?: string | null
+  description?: string | null
   published_at: string
   exams?: { title: string } | null
 }

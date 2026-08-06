@@ -18,9 +18,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   //   3. The middleware which blocks unauthenticated requests
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen bg-[#F4F5F7]">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto bg-[#F4F5F7]">
+      <main className="flex-1 overflow-y-auto w-full min-w-0">
         {children}
       </main>
     </div>

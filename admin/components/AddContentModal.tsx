@@ -29,7 +29,6 @@ const CONTENT_OPTIONS: ContentOption[] = [
   { value: 'admit_card',  label: 'Admit Card',             description: 'Admit card available for download',        icon: Bell, dbType: 'admit_card' },
   { value: 'result',      label: 'Result',                 description: 'Result declared / scorecards available',   icon: Bell, dbType: 'result' },
   { value: 'answer_key',  label: 'Answer Key',             description: 'Answer key released',                      icon: Bell, dbType: 'answer_key' },
-  { value: 'syllabus',    label: 'Syllabus',               description: 'Syllabus / exam pattern published',        icon: Bell, dbType: 'syllabus' },
 ]
 
 const STATUSES: ExamStatus[] = ['upcoming', 'active', 'closed', 'result_declared']
@@ -78,66 +77,51 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
   // ── Exam form state ──
   const [categories, setCategories] = useState<Category[]>([])
   const [states, setStates] = useState<State[]>([])
-  const [jobTags, setJobTags] = useState<JobTag[]>([])
   const [selectedStates, setSelectedStates] = useState<string[]>([])
-  const [selectedJobTags, setSelectedJobTags] = useState<string[]>([])
+  
+  // On-the-fly tags state for this post
+  const [postTags, setPostTags] = useState<{ name: string; color: string }[]>([])
+  const [tagInput, setTagInput] = useState('')
+
   const [examForm, setExamForm] = useState({
     title: '',
     slug: '',
     category_id: '',
-    department: '',
     description: '',
-    qualification: '',
-    age_limit: '',
     application_start: '',
     application_end: '',
+    auto_delete_at: '',
     exam_date: '',
     status: 'upcoming' as ExamStatus,
-    official_link: '',
     is_all_india: false,
-    vacancy_count: '',
   })
 
   // Links state: array of {label, url} rows
   const [examLinks, setExamLinks] = useState<{ label: string; url: string }[]>([])
 
-  const addLink = () => setExamLinks(prev => [...prev, { label: '', url: '' }])
+  const addLink = (label: string = '') => setExamLinks(prev => [...prev, { label, url: '' }])
   const removeLink = (i: number) => setExamLinks(prev => prev.filter((_, idx) => idx !== i))
   const updateLink = (i: number, field: 'label' | 'url', val: string) =>
     setExamLinks(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: val } : l))
 
-  const [newTagModalOpen, setNewTagModalOpen] = useState(false)
-  const [newTagName, setNewTagName] = useState('')
-  const [newTagColor, setNewTagColor] = useState('#1A3C6E')
-  const [creatingTag, setCreatingTag] = useState(false)
-
   const [notAnnouncedAppEnd, setNotAnnouncedAppEnd] = useState(false)
-  const [pendingOfficialLink, setPendingOfficialLink] = useState(false)
 
   const COLOR_PRESETS = ['#1A3C6E', '#FF7A00', '#059669', '#7C3AED', '#DC2626', '#DB2777', '#0284C7', '#D97706']
 
-  const handleCreateTag = async () => {
-    if (!newTagName.trim()) return
-    setCreatingTag(true)
-    try {
-      const slug = slugify(newTagName)
-      const { data, error } = await supabase
-        .from('job_tags')
-        .insert({ name: newTagName.trim(), slug, color: newTagColor })
-        .select()
-        .single()
-      if (error) throw error
-      if (data) {
-        setJobTags(prev => [...prev, data])
-        setSelectedJobTags(prev => [...prev, data.id])
-        setNewTagName('')
-        setNewTagModalOpen(false)
-      }
-    } catch (err: any) {
-      alert(`Error creating tag: ${err.message}`)
-    } finally {
-      setCreatingTag(false)
+  const handleAddPostTag = () => {
+    const trimmed = tagInput.trim()
+    if (!trimmed) return
+    if (postTags.some(t => t.name.toLowerCase() === trimmed.toLowerCase())) {
+      setTagInput('')
+      return
     }
+    const color = COLOR_PRESETS[postTags.length % COLOR_PRESETS.length]
+    setPostTags(prev => [...prev, { name: trimmed, color }])
+    setTagInput('')
+  }
+
+  const handleRemovePostTag = (index: number) => {
+    setPostTags(prev => prev.filter((_, i) => i !== index))
   }
 
   // ── Notification form state ──
@@ -146,6 +130,8 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
   const [showExamDropdown, setShowExamDropdown] = useState(false)
   const [selectedExam, setSelectedExam] = useState<{ id: string; title: string } | null>(null)
   const [notifTitle, setNotifTitle] = useState('')
+  const [notifLinkUrl, setNotifLinkUrl] = useState('')
+  const [notifDescription, setNotifDescription] = useState('')
   const [pdfFile, setPdfFile] = useState<File | null>(null)
 
   // ── Load reference data on mount ──
@@ -153,7 +139,6 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
     if (!open) return
     supabase.from('categories').select('*').order('name').then(({ data }) => setCategories(data ?? []))
     supabase.from('states').select('*').order('name').then(({ data }) => setStates(data ?? []))
-    supabase.from('job_tags').select('*').order('name').then(({ data }) => setJobTags(data ?? []))
     supabase.from('exams').select('id, title').order('title').then(({ data }) => setAllExams(data ?? []))
   }, [open])
 
@@ -164,17 +149,19 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
     setSuccess(false)
     setLoading(false)
     setSelectedStates([])
-    setSelectedJobTags([])
+    setPostTags([])
+    setTagInput('')
     setExamForm({
-      title: '', slug: '', category_id: '', department: '', description: '',
-      qualification: '', age_limit: '', application_start: '', application_end: '',
-      exam_date: '', status: 'upcoming', official_link: '', is_all_india: false,
-      vacancy_count: '',
+      title: '', slug: '', category_id: '', description: '',
+      application_start: '', application_end: '', auto_delete_at: '',
+      exam_date: '', status: 'upcoming', is_all_india: false,
     })
     setExamLinks([])
     setSelectedExam(null)
     setExamSearch('')
     setNotifTitle('')
+    setNotifLinkUrl('')
+    setNotifDescription('')
     setPdfFile(null)
     setShowExamDropdown(false)
   }, [])
@@ -194,9 +181,6 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
   const toggleState = (id: string) =>
     setSelectedStates(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id])
 
-  const toggleJobTag = (id: string) =>
-    setSelectedJobTags(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])
-
   // ── Notification helpers ──
   const filteredExams = allExams.filter(e =>
     e.title.toLowerCase().includes(examSearch.toLowerCase())
@@ -213,13 +197,17 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
         const payload = {
           ...examForm,
           description: (examForm.description ?? '').replace(/\\n/g, '\n').replace(/\r\n/g, '\n'),
-          vacancy_count: examForm.vacancy_count !== '' && examForm.vacancy_count !== null ? Number(examForm.vacancy_count) : null,
+          department: null,
+          qualification: null,
+          age_limit: null,
+          vacancy_count: null,
+          official_link: null,
           details: null,
           category_id: examForm.category_id || null,
-          exam_date: examForm.exam_date || null,
-          application_start: examForm.application_start || null,
+          exam_date: null,
+          application_start: null,
           application_end: notAnnouncedAppEnd ? null : (examForm.application_end || null),
-          official_link: pendingOfficialLink ? null : (examForm.official_link || null),
+          auto_delete_at: examForm.auto_delete_at || null,
         }
 
         const { data, error: insertErr } = await supabase.from('exams').insert(payload).select().single()
@@ -234,11 +222,28 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
           )
         }
 
-        // Sync job tags
-        if (selectedJobTags.length > 0) {
-          await supabase.from('exam_job_tags').insert(
-            selectedJobTags.map(job_tag_id => ({ exam_id: examId, job_tag_id }))
-          )
+        // Sync job tags (upserting tags on-the-fly)
+        if (postTags.length > 0) {
+          const tagIds: string[] = []
+          for (const t of postTags) {
+            const slug = slugify(t.name)
+            const { data: existing } = await supabase.from('job_tags').select('id').eq('slug', slug).maybeSingle()
+            if (existing) {
+              tagIds.push(existing.id)
+            } else {
+              const { data: created } = await supabase.from('job_tags').insert({
+                name: t.name,
+                slug,
+                color: t.color,
+              }).select('id').single()
+              if (created) tagIds.push(created.id)
+            }
+          }
+          if (tagIds.length > 0) {
+            await supabase.from('exam_job_tags').insert(
+              tagIds.map(job_tag_id => ({ exam_id: examId, job_tag_id }))
+            )
+          }
         }
 
         // Sync exam_links
@@ -272,6 +277,8 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
           type: dbType,
           title: notifTitle,
           pdf_url,
+          link_url: notifLinkUrl.trim() || null,
+          description: notifDescription.trim() || null,
           published_at: new Date().toISOString(),
         })
         if (insertErr) throw insertErr
@@ -358,54 +365,19 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
                   <Field label="Slug" required>
                     <input className={INPUT_CLS} value={examForm.slug} onChange={e => setExamField('slug', e.target.value)} required placeholder="ssc-cgl-2026" />
                   </Field>
-                  <Field label="Department">
-                    <input className={INPUT_CLS} value={examForm.department} onChange={e => setExamField('department', e.target.value)} placeholder="Staff Selection Commission" />
-                  </Field>
                   <Field label="Status" required>
                     <select className={INPUT_CLS} value={examForm.status} onChange={e => setExamField('status', e.target.value)}>
                       {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
                     </select>
                   </Field>
-                  <Field label="Official Website (Apply Link)">
-                    <input
-                      className={INPUT_CLS}
-                      value={examForm.official_link}
-                      onChange={e => setExamField('official_link', e.target.value)}
-                      placeholder="https://ssc.gov.in"
-                      disabled={pendingOfficialLink}
-                    />
-                    <label className="flex items-center gap-2 mt-1.5 cursor-pointer text-xs text-[#5B6880]">
-                      <input
-                        type="checkbox"
-                        checked={pendingOfficialLink}
-                        onChange={e => {
-                          setPendingOfficialLink(e.target.checked)
-                          if (e.target.checked) setExamField('official_link', '')
-                        }}
-                        className="accent-[#1A3C6E]"
-                      />
-                      <span>Link pending / not announced yet</span>
-                    </label>
-                  </Field>
-                  <Field label="Qualification">
-                    <input className={INPUT_CLS} value={examForm.qualification} onChange={e => setExamField('qualification', e.target.value)} placeholder="Graduation" />
-                  </Field>
-                  <Field label="Age Limit Summary">
-                    <input className={INPUT_CLS} value={examForm.age_limit} onChange={e => setExamField('age_limit', e.target.value)} placeholder="18–32 years" />
-                  </Field>
-                  <Field label="Total Posts / Vacancies">
-                    <input type="number" min="0" className={INPUT_CLS} value={examForm.vacancy_count} onChange={e => setExamField('vacancy_count', e.target.value)} placeholder="e.g. 17727 (Leave empty if not announced)" />
-                  </Field>
-                  <Field label="Application Start">
-                    <input type="date" className={INPUT_CLS} value={examForm.application_start} onChange={e => setExamField('application_start', e.target.value)} />
-                  </Field>
                   <Field label="Application End (Last Date)">
                     <input
-                      type="date"
+                      type="text"
                       className={INPUT_CLS}
                       value={examForm.application_end}
                       onChange={e => setExamField('application_end', e.target.value)}
                       disabled={notAnnouncedAppEnd}
+                      placeholder="e.g. 25-08-2026 or 25 Aug 2026"
                     />
                     <label className="flex items-center gap-2 mt-1.5 cursor-pointer text-xs text-[#5B6880]">
                       <input
@@ -420,8 +392,16 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
                       <span>Not yet announced</span>
                     </label>
                   </Field>
-                  <Field label="Exam Date">
-                    <input type="date" className={INPUT_CLS} value={examForm.exam_date} onChange={e => setExamField('exam_date', e.target.value)} />
+                  {/* Auto Delete Date */}
+                  <Field label="Auto Delete Date">
+                    <input
+                      type="text"
+                      className={INPUT_CLS}
+                      value={examForm.auto_delete_at}
+                      onChange={e => setExamField('auto_delete_at', e.target.value)}
+                      placeholder="e.g. 2026-08-30 or 30 Aug 2026"
+                    />
+                    <p className="text-xs text-[#5B6880] mt-1">Optional — post will be automatically deleted on this date</p>
                   </Field>
                 </div>
 
@@ -447,19 +427,49 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
 
                 {/* Additional Links Section */}
                 <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <label className="text-xs font-bold text-[#0F1C30] uppercase tracking-wider flex items-center gap-2">
-                      <Link size={13} className="text-[#1A3C6E]" /> Additional Links
+                      <Link size={13} className="text-[#1A3C6E]" /> Additional / Important Links
                     </label>
-                    <button
-                      type="button"
-                      onClick={addLink}
-                      className="flex items-center gap-1 text-xs font-bold text-[#FF7A00] hover:text-[#E86E00] transition-colors"
-                    >
-                      <Plus size={13} /> Add Link
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => addLink('Syllabus')}
+                        className="px-2.5 py-1 text-[11px] font-semibold bg-sky-100 text-sky-800 rounded-md hover:bg-sky-200 transition-colors"
+                      >
+                        + Syllabus Link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addLink('Admit Card')}
+                        className="px-2.5 py-1 text-[11px] font-semibold bg-amber-100 text-amber-800 rounded-md hover:bg-amber-200 transition-colors"
+                      >
+                        + Admit Card Link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addLink('Answer Key')}
+                        className="px-2.5 py-1 text-[11px] font-semibold bg-purple-100 text-purple-800 rounded-md hover:bg-purple-200 transition-colors"
+                      >
+                        + Answer Key Link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addLink('Result')}
+                        className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-100 text-emerald-800 rounded-md hover:bg-emerald-200 transition-colors"
+                      >
+                        + Result Link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addLink('')}
+                        className="px-2.5 py-1 text-[11px] font-semibold bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors flex items-center gap-0.5"
+                      >
+                        <Plus size={12} /> Custom Link
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-xs text-[#5B6880]">Add supplementary links (e.g. Official PDF, Syllabus, Apply Online, Check Result). These appear on the public exam page.</p>
+                  <p className="text-xs text-[#5B6880]">Add supplementary links (Official PDF, Syllabus, Apply Online, Result, Answer Key). These appear on the public exam page.</p>
 
                   {examLinks.length === 0 ? (
                     <p className="text-xs text-[#5B6880] italic">No links added yet. Click "+ Add Link" to add one.</p>
@@ -494,74 +504,55 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
                   )}
                 </div>
 
-                {/* Job Type Tags (Fix 6a: Create on the fly) */}
+                {/* Job Type Tags — Dynamic Pills Creator */}
                 <Field label="Job Type Tags">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-[#5B6880]">{selectedJobTags.length} tag(s) selected</span>
+                  <p className="text-xs text-[#5B6880] mb-2">Type a tag name and press Enter or click Add Tag (e.g. Apprentice, Police, Result).</p>
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={tagInput}
+                      onChange={e => setTagInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleAddPostTag()
+                        }
+                      }}
+                      placeholder="Enter tag name…"
+                      className={`${INPUT_CLS} flex-1`}
+                    />
                     <button
                       type="button"
-                      onClick={() => setNewTagModalOpen(!newTagModalOpen)}
-                      className="text-xs font-bold text-[#FF7A00] hover:underline flex items-center gap-1"
+                      onClick={handleAddPostTag}
+                      disabled={!tagInput.trim()}
+                      className="px-4 py-2 bg-[#1A3C6E] text-white text-xs font-bold rounded-lg hover:bg-[#FF7A00] transition-colors disabled:opacity-50 flex-shrink-0"
                     >
-                      + Create New Tag
+                      + Add Tag
                     </button>
                   </div>
 
-                  {/* Inline New Tag Creator */}
-                  {newTagModalOpen && (
-                    <div className="bg-[#EEF2F8] p-3 rounded-lg border border-[#1A3C6E]/20 mb-3 space-y-2">
-                      <p className="text-xs font-bold text-[#0F1C30]">Add New Job Tag</p>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={newTagName}
-                          onChange={e => setNewTagName(e.target.value)}
-                          placeholder="e.g. Apprentice, Assistant"
-                          className="flex-1 border border-gray-300 rounded px-2.5 py-1 text-xs text-[#0F1C30] outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleCreateTag}
-                          disabled={creatingTag || !newTagName.trim()}
-                          className="bg-[#1A3C6E] text-white font-bold text-xs px-3 py-1 rounded hover:bg-[#FF7A00] transition-colors disabled:opacity-50"
-                        >
-                          {creatingTag ? 'Creating…' : 'Save Tag'}
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-1.5 pt-1">
-                        <span className="text-[11px] text-[#5B6880] font-medium mr-1">Badge Color:</span>
-                        {COLOR_PRESETS.map(c => (
-                          <button
-                            key={c}
-                            type="button"
-                            onClick={() => setNewTagColor(c)}
-                            className={`w-5 h-5 rounded-full border border-black/10 transition-transform ${newTagColor === c ? 'scale-125 ring-2 ring-[#1A3C6E]' : ''}`}
-                            style={{ backgroundColor: c }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {jobTags.length === 0 ? (
-                      <p className="text-xs text-[#5B6880] col-span-full">No tags found. Click "+ Create New Tag" above to add your first tag.</p>
-                    ) : jobTags.map(tag => (
-                      <label key={tag.id} className="flex items-center gap-2 cursor-pointer text-sm">
-                        <input
-                          type="checkbox"
-                          checked={selectedJobTags.includes(tag.id)}
-                          onChange={() => toggleJobTag(tag.id)}
-                          className="accent-[#1A3C6E]"
-                        />
+                  <div className="flex flex-wrap gap-2">
+                    {postTags.length === 0 ? (
+                      <p className="text-xs text-[#5B6880] italic">No tags added for this post yet.</p>
+                    ) : (
+                      postTags.map((t, idx) => (
                         <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
-                          style={{ backgroundColor: tag.color + '20', color: tag.color }}
+                          key={idx}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold shadow-xs"
+                          style={{ backgroundColor: t.color + '25', color: t.color }}
                         >
-                          ● {tag.name}
+                          ● {t.name}
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePostTag(idx)}
+                            className="hover:opacity-80 transition-opacity ml-0.5"
+                            title="Remove tag"
+                          >
+                            <X size={13} />
+                          </button>
                         </span>
-                      </label>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </Field>
 
@@ -659,6 +650,27 @@ export default function AddContentModal({ open, onClose, onSuccess }: AddContent
                     required
                     placeholder={`${CONTENT_OPTIONS.find(o => o.value === contentType)?.label} — enter details`}
                     className={INPUT_CLS}
+                  />
+                </Field>
+
+                {/* Direct Link URL */}
+                <Field label="Direct Link / Website URL" hint="Optional — direct website link to check result, download admit card, or view answer key">
+                  <input
+                    type="url"
+                    value={notifLinkUrl}
+                    onChange={e => setNotifLinkUrl(e.target.value)}
+                    placeholder="https://ssc.gov.in/result"
+                    className={INPUT_CLS}
+                  />
+                </Field>
+
+                {/* Description / Instructions */}
+                <Field label="Description / Details" hint="Optional — write details, instructions, or cut-off info for users">
+                  <textarea
+                    value={notifDescription}
+                    onChange={e => setNotifDescription(e.target.value)}
+                    placeholder="Write details, cut-off info, or instructions for users..."
+                    className={`${INPUT_CLS} min-h-24 resize-y`}
                   />
                 </Field>
 

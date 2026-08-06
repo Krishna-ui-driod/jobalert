@@ -29,6 +29,8 @@ export default function NotificationForm({ notification, onSuccess, onCancel }: 
   )
   const [type, setType] = useState<NotificationType>(notification?.type ?? 'new_job')
   const [title, setTitle] = useState(notification?.title ?? '')
+  const [linkUrl, setLinkUrl] = useState(notification?.link_url ?? '')
+  const [description, setDescription] = useState(notification?.description ?? '')
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [currentPdfUrl, setCurrentPdfUrl] = useState<string | null>(notification?.pdf_url ?? null)
   const [loading, setLoading] = useState(false)
@@ -67,23 +69,24 @@ export default function NotificationForm({ notification, onSuccess, onCancel }: 
         pdf_url = urlData.publicUrl
       }
 
+      const notifPayload = {
+        exam_id: selectedExam?.id ?? null,
+        type,
+        title,
+        pdf_url,
+        link_url: linkUrl.trim() || null,
+        description: description.trim() || null,
+      }
+
       if (notification?.id) {
         const { error: updateError } = await supabase
           .from('notifications')
-          .update({
-            exam_id: selectedExam?.id ?? null,
-            type,
-            title,
-            pdf_url,
-          })
+          .update(notifPayload)
           .eq('id', notification.id)
         if (updateError) throw updateError
       } else {
         const { error: insertError } = await supabase.from('notifications').insert({
-          exam_id: selectedExam?.id ?? null,
-          type,
-          title,
-          pdf_url,
+          ...notifPayload,
           published_at: new Date().toISOString(),
         })
         if (insertError) throw insertError
@@ -185,6 +188,34 @@ export default function NotificationForm({ notification, onSuccess, onCancel }: 
           required
           placeholder="SSC CGL 2025 Result Declared"
           className={inputCls}
+        />
+      </div>
+
+      {/* Direct Link URL */}
+      <div>
+        <label className="block text-xs font-bold text-[#0F1C30] uppercase tracking-wider mb-1.5">
+          Direct Link / Website URL <span className="text-gray-400 font-normal normal-case">(optional)</span>
+        </label>
+        <input
+          type="url"
+          value={linkUrl}
+          onChange={e => setLinkUrl(e.target.value)}
+          placeholder="https://ssc.gov.in/result"
+          className={inputCls}
+        />
+        <p className="text-xs text-[#5B6880] mt-1">Direct website link to check result, download admit card, or view answer key</p>
+      </div>
+
+      {/* Description */}
+      <div>
+        <label className="block text-xs font-bold text-[#0F1C30] uppercase tracking-wider mb-1.5">
+          Description / Instructions <span className="text-gray-400 font-normal normal-case">(optional)</span>
+        </label>
+        <textarea
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="Write details, cut-off info, or instructions for users..."
+          className={`${inputCls} min-h-24 resize-y`}
         />
       </div>
 

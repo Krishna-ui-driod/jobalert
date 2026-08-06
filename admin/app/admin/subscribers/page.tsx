@@ -29,26 +29,26 @@ export default async function SubscribersPage() {
   ])
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-6">
-        <h1 className="text-[#0F1C30] font-bold text-2xl">Subscribers</h1>
-        <p className="text-[#5B6880] text-sm mt-1">Users subscribed to exam and notification alerts.</p>
+        <h1 className="text-[#0F1C30] font-bold text-xl sm:text-2xl">Subscribers</h1>
+        <p className="text-[#5B6880] text-xs sm:text-sm mt-1">Users subscribed to exam and notification alerts.</p>
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Total Subscribers', value: count, icon: Users, color: 'text-[#1A3C6E]', bg: 'bg-[#EEF2F8]' },
           { label: 'Email Alerts',      value: breakdown.email, icon: Mail,  color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Push Alerts',       value: breakdown.push,  icon: Bell,  color: 'text-orange-600', bg: 'bg-orange-50' },
         ].map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
-            <div className={`w-11 h-11 ${bg} rounded-xl flex items-center justify-center`}>
+          <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5 flex items-center gap-4">
+            <div className={`w-11 h-11 ${bg} rounded-xl flex items-center justify-center flex-shrink-0`}>
               <Icon size={20} className={color} />
             </div>
             <div>
-              <p className="text-[#5B6880] text-xs">{label}</p>
-              <p className="text-[#0F1C30] font-bold text-2xl">{value.toLocaleString('en-IN')}</p>
+              <p className="text-[#5B6880] text-xs font-medium">{label}</p>
+              <p className="text-[#0F1C30] font-bold text-xl sm:text-2xl">{value.toLocaleString('en-IN')}</p>
             </div>
           </div>
         ))}

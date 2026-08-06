@@ -45,7 +45,7 @@ export default function EditExamPage({ params }: { params: { id: string } }) {
   }
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl">
       <div className="mb-6">
         <Link
           href="/admin/exams"
