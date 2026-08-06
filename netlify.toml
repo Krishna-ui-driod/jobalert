@@ -3,6 +3,30 @@
   publish = "dist"
 
 [[redirects]]
+  from = "/sitemap.xml"
+  to = "/sitemap.xml"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/robots.txt"
+  to = "/robots.txt"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/sw.js"
+  to = "/sw.js"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/google*.html"
+  to = "/google*.html"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

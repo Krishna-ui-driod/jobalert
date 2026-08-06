@@ -88,6 +88,7 @@ interface ExamRow {
   official_link: string | null;
   vacancy_count: number | null;
   is_all_india: boolean;
+  auto_delete_at?: string | null;
   created_at: string;
   categories: { id: string; name: string; slug: string } | null;
   exam_job_tags: { job_tags: JobTag | null }[];
@@ -106,6 +107,8 @@ interface NotificationRow {
   type: string;
   title: string;
   pdf_url?: string | null;
+  link_url?: string | null;
+  description?: string | null;
   published_at?: string;
   exams?: ExamRow | null;
 }
@@ -194,6 +197,12 @@ function filterExams(
   selectedTag?: string
 ) {
   return exams.filter((e) => {
+    if (e.auto_delete_at) {
+      const expTime = new Date(e.auto_delete_at).getTime();
+      if (!isNaN(expTime) && expTime <= Date.now()) {
+        return false;
+      }
+    }
     const q = searchQuery.toLowerCase().trim();
     const searchMatch = !q || matchExamQuery(e, q);
 
@@ -1535,25 +1544,44 @@ function NotificationTypePage({
                 </h3>
 
                 {item.exams?.title && (
-                  <p className="text-[#5B6880] text-xs font-medium mb-3">
+                  <p className="text-[#5B6880] text-xs font-medium mb-2">
                     Linked Exam: <span className="text-[#1A3C6E] font-semibold">{item.exams.title}</span>
+                  </p>
+                )}
+
+                {item.description && (
+                  <p className="text-xs text-[#5B6880] mb-3 leading-relaxed bg-gray-50 p-2.5 rounded-lg border border-gray-100 whitespace-pre-wrap">
+                    {item.description}
                   </p>
                 )}
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs mt-2">
-                {item.pdf_url ? (
-                  <a
-                    href={item.pdf_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-bold text-[#FF7A00] hover:text-[#E86E00]"
-                  >
-                    <Download size={14} /> Download PDF
-                  </a>
-                ) : (
-                  <span className="text-xs text-[#5B6880] font-medium">Official Notice</span>
-                )}
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs mt-2 flex-wrap gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {item.link_url && (
+                    <a
+                      href={item.link_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-bold text-[#1A3C6E] hover:underline bg-blue-50 px-2.5 py-1 rounded-md"
+                    >
+                      <ExternalLink size={13} /> Direct Link
+                    </a>
+                  )}
+                  {item.pdf_url && (
+                    <a
+                      href={item.pdf_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-bold text-[#FF7A00] hover:text-[#E86E00]"
+                    >
+                      <Download size={14} /> Download PDF
+                    </a>
+                  )}
+                  {!item.link_url && !item.pdf_url && (
+                    <span className="text-xs text-[#5B6880] font-medium">Official Notice</span>
+                  )}
+                </div>
 
                 {item.exams?.slug && (
                   <button
